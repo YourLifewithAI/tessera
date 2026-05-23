@@ -80,9 +80,56 @@ These are *gestural* profiles for v0, not policy science. Refine with real surve
 | Civic Center | Life | 40 | +12 | Schools, clinics, parks. Always goodwill-positive. Lead with this. |
 | Coordination Node | Coordination | 100 | -2 | Required to complete a Tessera. Modulated by `fed_trust`. |
 
-**Cycles regen:** +5/tick from Mass Timber Housing (each), +2/tick from Chip Fab, +1/tick from Data Center.
+**Cycles regen:** see "Economic substrate" below. Cycles are now redefined as *quarterly community-investable capital*; tiles draw capex, accrue opex, and produce revenue.
 
 **Starting resources:** 250 Cycles, 50 Goodwill, 0 of everything else.
+
+---
+
+## Economic substrate (v0.1)
+
+The foundation pass adds an explicit economic layer beneath the social-license game. The thesis remains: **the hard part is the community.** Economics is a means of making lived experience and regional spillover legible — not the new win condition.
+
+### Cycles, redefined
+
+A Cycle is one unit of quarterly community-investable capital. A tick now anchors to one calendar quarter (`TICK_MS = 4000`, `TICKS_PER_YEAR = 4`); the HUD shows `Year N · Q M`. The old "Cycles regen" rule is replaced by the cash flow:
+
+> `Δcycles = round(Σ tile.revenue × TFP − Σ tile.opex)`
+
+Existing forks keep working: `cyclesPerTick` is read as a fallback for `revenue`, and `cost` is read as a fallback for `capex`.
+
+### Per-tile fields (all optional, 0 defaults)
+
+| Field | Meaning |
+|---|---|
+| `capex` | one-time placement cost (Cycles) |
+| `opex` | recurring operating drain (Cycles/quarter) |
+| `revenue` | recurring output sold (Cycles/quarter) |
+| `jobsConstruction` | one-time build labor |
+| `jobsOps` | permanent operating jobs |
+| `emissionsPerTick` | net carbon flow, kt CO₂e/quarter (negative = avoided) |
+| `waterDrawPerTick` | net regional water draw, ML/quarter |
+
+Numbers in `data/tiles.js` are gestural but defensible — citations to EIA, BLS, NRC, DOE are inline in the file.
+
+### Total-factor productivity (TFP)
+
+Each revenue-producing tile gets a 5% revenue multiplier per **Coordination Node or Civic Center** within the Tessera radius (5 tiles), capped at 1.25×. This is the model's hook for the agglomeration claim in *A New Town, Built Whole*: federated AI plus civic infrastructure makes the whole block more productive.
+
+### New goodwill rules (with reasons)
+
+Every goodwill change now surfaces its cause in the reaction popup. The two new rules:
+
+- **Emissions rule.** If `cumulativeEmissions / yearsElapsed > state.emissionsCap` (default 120 kt/yr; see `data/states.js` for the strict and permissive states): −1 goodwill/tick with the message *"Emissions outpacing the state cap. Neighbors are organizing."*
+- **Jobs rule.** If `jobsOps ≥ 0.5 × population` and goodwill < 100: +1 goodwill per game-year (not per tick) with the message *"Strong local employment — community supports the project."*
+
+### Accumulators vs rates
+
+`cumulativeEmissions` and `cumulativeWaterDraw` grow unboundedly. **Rules always compare against a rate** (`cumulative / yearsElapsed`), never the raw stock. This keeps long sessions winnable and lets the next pass show "this Tessera has emitted N kt since groundbreaking" without that number becoming a doom counter.
+
+### What this enables next
+
+The next two passes — lived-experience and regional spillover — read from these fields without further schema change. A `state.policies = {}` hook is reserved for a v0.2 policy layer (community-benefit agreements, PILOTs, zoning) that will sit between tiles and outcomes as multipliers.
 
 ---
 

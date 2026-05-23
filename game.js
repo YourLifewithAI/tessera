@@ -16,11 +16,20 @@
   // ----- Constants -----
   const BOARD_W = 20;
   const BOARD_H = 16;
-  const TICK_MS = 2000;
+  const TICK_MS = 4000;
+  const TICKS_PER_YEAR = 4; // 1 tick = 1 quarter; one game-year ≈ 16s of real time
   const TESSERA_RADIUS_SQ = 25; // radius 5 squared
   const NEEDED_LAYERS = ["Power", "Silicon", "Materials", "Robotics", "Closed Loops", "Life"];
   const REACTION_FADE_MS = 5000;
   const STABILIZATION_TICKS = 5; // per DESIGN.md: Goodwill ≥ 0 sustained for N ticks after formation
+
+  // ----- Economic constants (v0.1 foundation) -----
+  // Cycles ≈ quarterly community-investable capital (per DESIGN.md).
+  // Emissions are kt CO2e/quarter; cumulative compared against a per-year rate.
+  const STATE_DEFAULT_EMISSIONS_CAP = 120; // kt CO2e/year if state has no override
+  const TFP_PER_AMPLIFIER = 0.05;          // each adjacent Coordination/Civic boosts revenue 5%
+  const TFP_CAP = 1.25;                    // hard ceiling on TFP multiplier
+  const JOBS_GOODWILL_THRESHOLD = 0.5;     // jobsOps / population to trigger jobs bonus
 
   // ----- State -----
   const state = {
@@ -46,6 +55,13 @@
     reactionTimerHandle: null,
     tickHandle: null,
     gameStartMs: 0,
+    // ----- v0.1 economic substrate -----
+    tickCount: 0,                // ticks since startGame; year/quarter derived
+    cumulativeEmissions: 0,      // kt CO2e since groundbreaking
+    cumulativeWaterDraw: 0,      // ML since groundbreaking
+    jobsOps: 0,                  // current operating headcount across all tiles
+    lastJobsBonusYear: -1,       // jobs-rule fires at most once per game-year
+    policies: {},                // placeholder hook for the next pass (CBAs, PILOTs, zoning)
   };
 
   // ----- DOM root -----
@@ -96,6 +112,12 @@
     state.tesseraeComplete = 0;
     state.reaction = null;
     state.gameStartMs = Date.now();
+    state.tickCount = 0;
+    state.cumulativeEmissions = 0;
+    state.cumulativeWaterDraw = 0;
+    state.jobsOps = 0;
+    state.lastJobsBonusYear = -1;
+    state.policies = {};
     generateTerrain(stateCode);
     const sName = window.STATES[stateCode].name;
     setReaction(`Welcome to ${sName}. Lead with civic and housing; build trust before you site the reactor.`, 'accent');
@@ -164,8 +186,9 @@
     }
     const tileId = state.selectedTileId;
     const def = window.TILES[tileId];
-    if (state.cycles < def.cost) {
-      setReaction(`Not enough Cycles (need ${def.cost}).`, 'bad');
+    const capex = def.capex ?? def.cost ?? 0;
+    if (state.cycles < capex) {
+      setReaction(`Not enough Cycles (need ${capex}).`, 'bad');
       renderGameBoard();
       return;
     }
@@ -190,7 +213,7 @@
     }
     // Place
     state.placed[k] = tileId;
-    state.cycles -= def.cost;
+    state.cycles -= capex;
     // Goodwill modulated by state sentiment.
     // Pro-sentiment states should AMPLIFY positive base goodwill (civic in WA is even better)
     // AND DAMPEN negative base goodwill (SMR in TX hurts less).
@@ -221,22 +244,54 @@
 
   function tick() {
     if (state.screen !== 'GAME_BOARD') return;
-    let dp = 0, dc = 0, dw = 0, df = 0, dcyc = 0, housingCount = 0;
+    state.tickCount++;
+    let dp = 0, dc = 0, dw = 0, df = 0, housingCount = 0;
+    let opex = 0, baseRevenue = 0, boostedRevenue = 0;
+    let jobsOps = 0, emissions = 0, waterDraw = 0;
+    // Index amplifier tiles (Coordination + Civic) for the TFP boost.
+    const amplifiers = [];
+    for (const k of Object.keys(state.placed)) {
+      const id = state.placed[k];
+      if (id === 'coordination' || id === 'civic') {
+        const [ax, ay] = k.split(',').map(Number);
+        amplifiers.push([ax, ay]);
+      }
+    }
     for (const k of Object.keys(state.placed)) {
       const def = window.TILES[state.placed[k]];
+      if (!def) continue;
       dp += def.power || 0;
       dc += def.compute || 0;
       dw += def.water || 0;
       df += def.food || 0;
-      dcyc += def.cyclesPerTick || 0;
+      opex += def.opex || 0;
+      jobsOps += def.jobsOps || 0;
+      emissions += def.emissionsPerTick || 0;
+      waterDraw += def.waterDrawPerTick || 0;
       if (state.placed[k] === 'housing') housingCount++;
+      // Revenue with TFP: count amplifiers within Tessera radius of this tile.
+      const tileRevenue = def.revenue ?? def.cyclesPerTick ?? 0;
+      if (tileRevenue !== 0) {
+        const [tx, ty] = k.split(',').map(Number);
+        let count = 0;
+        for (const [ax, ay] of amplifiers) {
+          if (ax === tx && ay === ty) continue;
+          if (squaredDistance(tx, ty, ax, ay) <= TESSERA_RADIUS_SQ) count++;
+        }
+        const tfp = Math.min(TFP_CAP, 1 + count * TFP_PER_AMPLIFIER);
+        baseRevenue += tileRevenue;
+        boostedRevenue += tileRevenue * tfp;
+      }
     }
     state.power = dp;
     state.compute = dc;
     state.water = dw;
     state.food = df;
-    state.cycles += dcyc;
+    state.cycles += Math.round(boostedRevenue - opex);
     state.population = housingCount * 250;
+    state.jobsOps = jobsOps;
+    state.cumulativeEmissions += emissions;
+    state.cumulativeWaterDraw += waterDraw;
     // Penalties when housing is starving
     if (housingCount > 0) {
       if (state.power < 0) {
@@ -247,6 +302,26 @@
         state.goodwill = clamp(state.goodwill - 1, -100, 200);
         setReaction("Food shortages. Add a vertical farm. Goodwill -1.", 'bad');
       }
+    }
+    // Emissions rate rule: penalize if cumulative/year exceeds the state cap.
+    // Use yearsElapsed = tickCount / TICKS_PER_YEAR, floored to at least 0.25
+    // so a single bad quarter doesn't immediately trip the rule.
+    const yearsElapsed = Math.max(0.25, state.tickCount / TICKS_PER_YEAR);
+    const sObj = window.STATES[state.selectedStateCode] || {};
+    const emCap = sObj.emissionsCap ?? STATE_DEFAULT_EMISSIONS_CAP;
+    if (state.cumulativeEmissions / yearsElapsed > emCap) {
+      state.goodwill = clamp(state.goodwill - 1, -100, 200);
+      setReaction("Emissions outpacing the state cap. Neighbors are organizing. Goodwill -1.", 'bad');
+    }
+    // Jobs rule: strong local employment lifts goodwill, at most once per year.
+    const currentYear = Math.floor(state.tickCount / TICKS_PER_YEAR);
+    if (state.population > 0
+        && state.jobsOps >= state.population * JOBS_GOODWILL_THRESHOLD
+        && state.goodwill < 100
+        && currentYear > state.lastJobsBonusYear) {
+      state.goodwill = clamp(state.goodwill + 1, -100, 200);
+      state.lastJobsBonusYear = currentYear;
+      setReaction("Strong local employment — community supports the project. Goodwill +1.", 'ok');
     }
     if (state.goodwill <= -50) {
       setReaction("Goodwill collapsed. Moratorium likely. Press B for a different state, R to restart.", 'bad');
@@ -284,6 +359,7 @@
     } else {
       renderHud();
       renderTray();
+      renderReaction();
     }
   }
 
@@ -408,17 +484,29 @@
     const foodTone  = housingCount === 0
       ? null
       : (state.food < housingCount && state.food < 5 ? 'bad' : 'ok');
-    hud.appendChild(stat('Cycles',   state.cycles,           'accent', 'Currency for placing tiles. Regens from housing (+5/tick) and silicon tiles.'));
+    // Time anchor: 1 tick = 1 quarter. Year 1 · Q1 at tick 0.
+    const year = Math.floor(state.tickCount / TICKS_PER_YEAR) + 1;
+    const quarter = (state.tickCount % TICKS_PER_YEAR) + 1;
+    // Emissions tone: green if net-avoided, red if exceeding rate cap, neutral otherwise.
+    const yearsElapsed = Math.max(0.25, state.tickCount / TICKS_PER_YEAR);
+    const emCap = s.emissionsCap ?? STATE_DEFAULT_EMISSIONS_CAP;
+    const emRate = state.cumulativeEmissions / yearsElapsed;
+    const emTone = state.cumulativeEmissions < 0 ? 'ok'
+                 : (emRate > emCap ? 'bad' : null);
+    hud.appendChild(stat('Cycles',   state.cycles,           'accent', 'Quarterly community-investable capital. Capex draws it down; revenue and rents replenish.'));
     hud.appendChild(stat('Goodwill', signed(state.goodwill), state.goodwill >= 0 ? 'ok' : 'bad', 'Community trust. Drops below 0 and Tessera candidates dissipate. Reaches −50 and a moratorium looms.'));
     hud.appendChild(stat('Power',    signed(state.power),    powerTone, 'Net MW across all tiles. Negative + housing = brownouts (−2 goodwill/tick).'));
     hud.appendChild(stat('Compute',  state.compute,          null,      'AI compute output. Not yet spent — sets up v1+ economy.'));
     hud.appendChild(stat('Water',    signed(state.water),    waterTone, 'Net water balance. Farms produce, housing/civic consume.'));
     hud.appendChild(stat('Food',     state.food,             foodTone,  'Food output. Must meet population or housing starves (−1 goodwill/tick).'));
     hud.appendChild(stat('Pop',      state.population,       null,      '~250 residents per Mass Timber Housing tile.'));
+    hud.appendChild(stat('Jobs',     state.jobsOps,          null,      `Operating jobs across all tiles. ≥${Math.round(JOBS_GOODWILL_THRESHOLD * 100)}% of pop triggers a yearly goodwill bonus.`));
+    hud.appendChild(stat('Emissions', state.cumulativeEmissions, emTone, `Cumulative kt CO2e since groundbreaking. State cap: ${emCap} kt/yr; current rate: ${Math.round(emRate)} kt/yr.`));
+    hud.appendChild(stat('Year',     `${year} · Q${quarter}`, 'accent', `1 tick = 1 quarter. ${TICKS_PER_YEAR} ticks/year.`));
     hud.appendChild(stat('Tesserae', state.tesseraeComplete, 'accent',  'Completed Tesserae this session.'));
     const hints = el('div', 'hints');
     hints.innerHTML = '<div>R: restart · B: back · Esc/RClick: deselect</div>'
-                    + `<div>Tick every ${TICK_MS / 1000}s. Place tiles to grow.</div>`;
+                    + `<div>Tick every ${TICK_MS / 1000}s (= 1 quarter). Place tiles to grow.</div>`;
     hud.appendChild(hints);
     return hud;
   }
@@ -527,7 +615,10 @@
         modifier = def.baseGoodwill >= 0 ? 1.0 + (s * 0.35) : 1.0 - (s * 0.35);
       }
       const projected = Math.round(def.baseGoodwill * modifier);
-      const affordable = state.cycles >= def.cost;
+      const capex = def.capex ?? def.cost ?? 0;
+      const affordable = state.cycles >= capex;
+      const jobsOps = def.jobsOps || 0;
+      const emPerTick = def.emissionsPerTick || 0;
       const row = el('button', 'tray-tile' + (state.selectedTileId === id ? ' selected' : '') + (affordable ? '' : ' unaffordable'));
       const icon = document.createElement('img');
       icon.className = 'tile-icon';
@@ -538,8 +629,9 @@
       const body = el('div', 'tile-body');
       body.appendChild(el('div', 'tile-name', def.name));
       const meta = el('div', 'tile-meta');
-      meta.innerHTML = `${def.cost}C · base <span class="${def.baseGoodwill >= 0 ? 'gw-pos' : 'gw-neg'}">${signed(def.baseGoodwill)}</span>` +
-                       ` · here <span class="${projected >= 0 ? 'gw-pos' : 'gw-neg'}">${signed(projected)}</span> · ${def.layer}`;
+      meta.innerHTML = `${capex}C · base <span class="${def.baseGoodwill >= 0 ? 'gw-pos' : 'gw-neg'}">${signed(def.baseGoodwill)}</span>` +
+                       ` · here <span class="${projected >= 0 ? 'gw-pos' : 'gw-neg'}">${signed(projected)}</span> · ${def.layer}` +
+                       ` · J${jobsOps} · E${signed(emPerTick)}`;
       body.appendChild(meta);
       row.appendChild(body);
       row.addEventListener('click', () => {

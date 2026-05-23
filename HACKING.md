@@ -62,7 +62,7 @@ my_new_tile: {
   name: "My New Tile",
   subtitle: "What it does",
   layer: "Closed Loops",          // must be one of the six, or "Coordination"
-  cost: 40,                        // Cycles
+  cost: 40, capex: 40,             // capex is the new alias; either works
   baseGoodwill: 3,
   sentimentKey: "enviro",          // which state score modulates this
   color: "#3DA75C",
@@ -74,6 +74,28 @@ my_new_tile: {
 ```
 
 Add headlines for it in `window.HEADLINES` (same file). Done — the tray renders it automatically.
+
+### Add the v0.1 economic fields to a tile
+
+All optional, defaults to 0. Add as many as make sense for your tile. The fields and their units:
+
+```js
+opex: 2,                  // recurring operating drain   (Cycles/quarter)
+revenue: 6,               // recurring output sold       (Cycles/quarter)
+jobsConstruction: 200,    // one-time build labor        (person-quarters)
+jobsOps: 40,              // permanent operating jobs    (headcount)
+emissionsPerTick: -1,     // net carbon (negative = avoided)  (kt CO2e/quarter)
+waterDrawPerTick: 2,      // net regional water draw     (ML/quarter)
+```
+
+Picking numbers: aim for relative magnitudes that match real-world references (EIA for emissions, BLS for jobs, NRC/DOE for energy capex). Cite your source in a comment. The existing tiles do this — copy the pattern.
+
+A few rules of thumb:
+- Net `revenue − opex` should usually fall in `−2 … +8` Cycles/quarter. Larger and the tile dominates; smaller and it's invisible.
+- `emissionsPerTick` typically `−8 … +5`. Negative for displacement (clean power), positive for industrial process.
+- `waterDrawPerTick` typically `−3 … +8`. Negative for closed-loop net producers (vertical farm).
+
+If your tile has revenue, it will benefit from the TFP boost when placed near a Coordination Node or Civic Center (+5% per neighbor within Tessera radius, capped at +25%).
 
 ### Add a new layer
 

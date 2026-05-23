@@ -5,6 +5,28 @@
 //   Power, Silicon, Materials, Robotics, Closed Loops, Life, Coordination
 // To add a tile: add an entry here. The tray renders from this object.
 // To swap art: drop a new SVG at the `art` path (default tiles/<id>.svg).
+//
+// ---------------------------------------------------------------
+// v0.1 economic substrate (foundation pass). All optional with 0 defaults.
+// Existing forks keep working at lower fidelity — missing fields read as 0.
+//
+//   capex             — one-time placement cost (alias for `cost`)         Cycles
+//   opex              — recurring operating drain                          Cycles/quarter
+//   revenue           — recurring output sold (replaces `cyclesPerTick`)   Cycles/quarter
+//   jobsConstruction  — one-time build labor (decays over ~8 quarters)     person-quarters
+//   jobsOps           — permanent operating jobs                           headcount
+//   emissionsPerTick  — net carbon flow (negative = avoided)               kt CO2e/quarter
+//   waterDrawPerTick  — net regional water draw (negative = net produced)  ML/quarter
+//
+// Sources (gestural calibration, not policy-grade):
+//   SMR:        NRC SMR licensing dockets; NREL ATB 2024; DOE NE-1
+//   Chip Fab:   BLS NAICS 3344; CHIPS Act fab employment estimates
+//   Datacenter: Uptime Institute; LBNL data center energy reports; BLS NAICS 5182
+//   Solar:      NREL utility-scale PV cost & employment models
+//   Housing:    BLS construction trades + multifamily property mgmt staffing
+//   Civic:      BLS public-sector (NAICS 6111 schools, 6211 ambulatory)
+//   Emissions:  EPA eGRID 2024; EIA AEO 2025
+// Cycles (game currency) ≈ quarterly community-investable capital. See DESIGN.md.
 // ===============================================================
 
 window.TILES = {
@@ -12,7 +34,10 @@ window.TILES = {
     name: "Civic Center",
     subtitle: "School + clinic + park",
     layer: "Life",
-    cost: 40,
+    cost: 40, capex: 40,
+    opex: 1, revenue: 0,                 // public asset; cost center
+    jobsConstruction: 200, jobsOps: 60,  // teachers, clinicians, park staff
+    emissionsPerTick: 0, waterDrawPerTick: 0,
     baseGoodwill: 12,
     sentimentKey: "fed_trust",
     color: "#2EC9E3",
@@ -25,7 +50,10 @@ window.TILES = {
     name: "Mass Timber Housing",
     subtitle: "Modular timber midrise",
     layer: "Materials",
-    cost: 30,
+    cost: 30, capex: 30,
+    opex: 2, revenue: 7,                 // net +5 — preserves old cyclesPerTick semantics
+    jobsConstruction: 150, jobsOps: 8,   // super + maintenance trades
+    emissionsPerTick: 1, waterDrawPerTick: 4,
     baseGoodwill: 0,
     sentimentKey: "density",
     color: "#BC8E5C",
@@ -38,7 +66,10 @@ window.TILES = {
     name: "Vertical Farm",
     subtitle: "Greens, herbs, mushrooms, fish",
     layer: "Closed Loops",
-    cost: 35,
+    cost: 35, capex: 35,
+    opex: 1, revenue: 3,                 // food sales + waste-loop credits
+    jobsConstruction: 80, jobsOps: 25,
+    emissionsPerTick: -1, waterDrawPerTick: -3,  // net producer with closed loops
     baseGoodwill: 6,
     sentimentKey: "enviro",
     color: "#299E8E",
@@ -51,7 +82,10 @@ window.TILES = {
     name: "Solar+Battery",
     subtitle: "PV array + grid battery",
     layer: "Power",
-    cost: 25,
+    cost: 25, capex: 25,
+    opex: 0, revenue: 1,                 // modest power sold to grid
+    jobsConstruction: 50, jobsOps: 5,    // minimal O&M
+    emissionsPerTick: -2, waterDrawPerTick: 0,  // displaces grid baseline
     baseGoodwill: 2,
     sentimentKey: "enviro",
     color: "#FFD84A",
@@ -64,7 +98,10 @@ window.TILES = {
     name: "SMR",
     subtitle: "Small Modular Reactor",
     layer: "Power",
-    cost: 80,
+    cost: 80, capex: 80,
+    opex: 3, revenue: 5,                 // net +2; surplus power to grid
+    jobsConstruction: 1200, jobsOps: 180,  // NRC SMR licensing band
+    emissionsPerTick: -8, waterDrawPerTick: 6,  // displaces ~600kt/yr gas; cooling water
     baseGoodwill: -15,
     sentimentKey: "nuclear",
     color: "#F4A361",
@@ -77,7 +114,10 @@ window.TILES = {
     name: "Chip Fab",
     subtitle: "Mature-node fab (sensors, power electronics)",
     layer: "Silicon",
-    cost: 70,
+    cost: 70, capex: 70,
+    opex: 3, revenue: 5,                 // net +2; slightly above prior cyclesPerTick
+    jobsConstruction: 800, jobsOps: 350,  // largest ops headcount of any tile
+    emissionsPerTick: 3, waterDrawPerTick: 8,  // process emissions; ultra-pure water draw
     baseGoodwill: -3,
     sentimentKey: "data_center",
     color: "#527E9E",
@@ -90,7 +130,10 @@ window.TILES = {
     name: "Data Center",
     subtitle: "Liquid-cooled AI compute",
     layer: "Silicon",
-    cost: 60,
+    cost: 60, capex: 60,
+    opex: 4, revenue: 5,                 // net +1; high revenue but high opex
+    jobsConstruction: 200, jobsOps: 120,  // notoriously job-light per $ capex
+    emissionsPerTick: 4, waterDrawPerTick: 3,  // largest power-driven emitter
     baseGoodwill: -8,
     sentimentKey: "data_center",
     color: "#7B2CBF",
@@ -103,7 +146,10 @@ window.TILES = {
     name: "Robotics Factory",
     subtitle: "Wheeled, quadruped, gantry bots",
     layer: "Robotics",
-    cost: 50,
+    cost: 50, capex: 50,
+    opex: 2, revenue: 4,                 // net +2 from robot sales
+    jobsConstruction: 400, jobsOps: 200,
+    emissionsPerTick: 1, waterDrawPerTick: 1,
     baseGoodwill: -4,
     sentimentKey: "data_center",
     color: "#666E8C",
@@ -116,7 +162,10 @@ window.TILES = {
     name: "Coordination Node",
     subtitle: "Federated AI + community-benefits office",
     layer: "Coordination",
-    cost: 100,
+    cost: 100, capex: 100,
+    opex: 1, revenue: 0,                 // governance is a cost center; the value is the TFP boost
+    jobsConstruction: 100, jobsOps: 40,  // governance staff + AI ops
+    emissionsPerTick: 0, waterDrawPerTick: 0,
     baseGoodwill: -2,
     sentimentKey: "fed_trust",
     color: "#EBC96A",
