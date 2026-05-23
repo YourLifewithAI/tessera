@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Robotics Factory: warehouse silhouette with gantry crane + quadruped bot. -->
+  <rect width="100" height="100" rx="6" fill="#1A1E26"/>
+  <rect width="100" height="100" rx="6" fill="#8995B0" opacity="0.10"/>
+  <rect y="84" width="100" height="16" fill="#0B0D12"/>
+  <!-- warehouse outline -->
+  <polygon points="10,40 50,20 90,40 90,84 10,84"
+           fill="#2A2F3D" stroke="#8995B0" stroke-width="2"/>
+  <!-- roof line accent -->
+  <line x1="10" y1="40" x2="50" y2="20" stroke="#666E8C" stroke-width="2.5"/>
+  <line x1="90" y1="40" x2="50" y2="20" stroke="#666E8C" stroke-width="2.5"/>
+  <!-- gantry rail across ceiling -->
+  <rect x="14" y="44" width="72" height="3" fill="#8995B0"/>
+  <!-- gantry trolley with hanging arm -->
+  <rect x="42" y="44" width="14" height="6" fill="#FFD84A" stroke="#0B0D12" stroke-width="1"/>
+  <line x1="49" y1="50" x2="49" y2="64" stroke="#666E8C" stroke-width="2.5"/>
+  <!-- hanging gripper -->
+  <rect x="44" y="62" width="10" height="6" fill="#EB6B6B" stroke="#0B0D12" stroke-width="1"/>
+  <!-- quadruped robot on factory floor -->
+  <g>
+    <!-- body -->
+    <rect x="58" y="70" width="22" height="8" rx="2" fill="#8995B0" stroke="#0B0D12" stroke-width="1.2"/>
+    <!-- head -->
+    <rect x="76" y="68" width="6" height="6" rx="1" fill="#8995B0" stroke="#0B0D12" stroke-width="1"/>
+    <circle cx="80" cy="71" r="1.2" fill="#6BD89D"/>
+    <!-- legs -->
+    <line x1="62" y1="78" x2="60" y2="84" stroke="#8995B0" stroke-width="2.5"/>
+    <line x1="68" y1="78" x2="68" y2="84" stroke="#8995B0" stroke-width="2.5"/>
+    <line x1="74" y1="78" x2="76" y2="84" stroke="#8995B0" stroke-width="2.5"/>
+    <line x1="80" y1="78" x2="82" y2="84" stroke="#8995B0" stroke-width="2.5"/>
+  </g>
+  <!-- floor grid hint -->
+  <g stroke="#3A4258" stroke-width="0.6" opacity="0.5">
+    <line x1="14" y1="80" x2="86" y2="80"/>
+  </g>
+</svg>

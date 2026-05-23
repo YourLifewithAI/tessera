@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Solar+Battery: tilted PV array catching sun + battery cabinet. -->
+  <rect width="100" height="100" rx="6" fill="#1A1E26"/>
+  <rect width="100" height="100" rx="6" fill="#FFD84A" opacity="0.10"/>
+  <rect y="84" width="100" height="16" fill="#0B0D12"/>
+  <!-- sun -->
+  <circle cx="82" cy="20" r="9" fill="#FFD84A"/>
+  <g stroke="#FFD84A" stroke-width="2.5" stroke-linecap="round">
+    <line x1="82" y1="4"  x2="82" y2="9"/>
+    <line x1="95" y1="20" x2="100" y2="20"/>
+    <line x1="92" y1="9"  x2="96" y2="6"/>
+    <line x1="92" y1="31" x2="96" y2="34"/>
+  </g>
+  <!-- PV array -->
+  <g transform="translate(10 38) rotate(-16)">
+    <rect width="62" height="36" fill="#1F2A55" stroke="#4A5BA3" stroke-width="1.8"/>
+    <g stroke="#4A5BA3" stroke-width="0.9">
+      <line x1="0"  y1="12" x2="62" y2="12"/>
+      <line x1="0"  y1="24" x2="62" y2="24"/>
+      <line x1="20" y1="0"  x2="20" y2="36"/>
+      <line x1="41" y1="0"  x2="41" y2="36"/>
+    </g>
+    <polygon points="3,3 16,3 9.5,11" fill="#9CB3FF" opacity="0.55"/>
+  </g>
+  <!-- support legs -->
+  <line x1="28" y1="74" x2="28" y2="84" stroke="#3A4258" stroke-width="3"/>
+  <line x1="60" y1="80" x2="60" y2="84" stroke="#3A4258" stroke-width="3"/>
+  <!-- battery cabinet -->
+  <rect x="72" y="58" width="22" height="26" fill="#6BD89D" stroke="#0B0D12" stroke-width="1.8" rx="2"/>
+  <rect x="76" y="62" width="14" height="3" fill="#0B0D12"/>
+  <rect x="76" y="68" width="14" height="12" fill="#0B0D12" opacity="0.45"/>
+  <rect x="78" y="71" width="10" height="2.5" fill="#FFD84A"/>
+  <rect x="78" y="75" width="10" height="2.5" fill="#FFD84A" opacity="0.6"/>
+</svg>

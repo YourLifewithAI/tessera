@@ -1,0 +1,20 @@
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local dev artifacts
+node_modules/
+.cache/
+dist/
+build/
+*.log
+
+# Local-only files
+local-notes.md
+local-*.html

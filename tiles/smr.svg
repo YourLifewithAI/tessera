@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- SMR: containment dome + glowing core + steam plume + nuclear mark. -->
+  <rect width="100" height="100" rx="6" fill="#1A1E26"/>
+  <rect width="100" height="100" rx="6" fill="#F4A361" opacity="0.10"/>
+  <rect y="84" width="100" height="16" fill="#0B0D12"/>
+  <ellipse cx="50" cy="86" rx="32" ry="3" fill="#000" opacity="0.45"/>
+  <!-- steam plume -->
+  <circle cx="48" cy="14" r="5" fill="#E5E7EE" opacity="0.7"/>
+  <circle cx="56" cy="9"  r="4" fill="#E5E7EE" opacity="0.5"/>
+  <circle cx="42" cy="8"  r="3" fill="#E5E7EE" opacity="0.4"/>
+  <!-- containment shell -->
+  <path d="M 26 86 L 26 46 Q 26 18 50 18 Q 74 18 74 46 L 74 86 Z"
+        fill="#F4A361" stroke="#0B0D12" stroke-width="2.5"/>
+  <!-- pressure vessel core -->
+  <rect x="42" y="44" width="16" height="36" fill="#9C5527"/>
+  <!-- glowing core -->
+  <circle cx="50" cy="62" r="8" fill="#FFD84A"/>
+  <circle cx="50" cy="62" r="3.5" fill="#FFFFFF"/>
+  <!-- nuclear mark on shell -->
+  <circle cx="62" cy="76" r="4.5" fill="#0B0D12"/>
+  <g transform="translate(62 76)" fill="#FFD84A">
+    <path d="M 0 -3 L 2.6 1.5 L -2.6 1.5 Z"/>
+    <path d="M 0 -3 L 2.6 1.5 L -2.6 1.5 Z" transform="rotate(120)"/>
+    <path d="M 0 -3 L 2.6 1.5 L -2.6 1.5 Z" transform="rotate(240)"/>
+  </g>
+  <circle cx="62" cy="76" r="1" fill="#0B0D12"/>
+</svg>

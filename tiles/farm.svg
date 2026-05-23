@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Vertical Farm: tower with stacked grow trays + purple grow lights + leafy greens. -->
+  <rect width="100" height="100" rx="6" fill="#1A1E26"/>
+  <rect width="100" height="100" rx="6" fill="#299E8E" opacity="0.10"/>
+  <rect y="84" width="100" height="16" fill="#0B0D12"/>
+  <!-- building envelope -->
+  <rect x="20" y="14" width="60" height="72" fill="#142E29" stroke="#299E8E" stroke-width="2"/>
+  <!-- frame strut at top -->
+  <rect x="20" y="14" width="60" height="6" fill="#299E8E"/>
+  <!-- stacked grow trays -->
+  <g>
+    <rect x="24" y="26" width="52" height="12" fill="#1F4239"/>
+    <rect x="24" y="44" width="52" height="12" fill="#1F4239"/>
+    <rect x="24" y="62" width="52" height="12" fill="#1F4239"/>
+  </g>
+  <!-- purple grow-light bars -->
+  <g fill="#C75CFF">
+    <rect x="24" y="24" width="52" height="2"/>
+    <rect x="24" y="42" width="52" height="2"/>
+    <rect x="24" y="60" width="52" height="2"/>
+  </g>
+  <!-- magenta light haze -->
+  <g fill="#C75CFF" opacity="0.18">
+    <rect x="24" y="26" width="52" height="12"/>
+    <rect x="24" y="44" width="52" height="12"/>
+    <rect x="24" y="62" width="52" height="12"/>
+  </g>
+  <!-- leafy greens -->
+  <g fill="#6BD89D">
+    <circle cx="30" cy="34" r="3"/>
+    <circle cx="40" cy="34" r="3"/>
+    <circle cx="50" cy="34" r="3"/>
+    <circle cx="60" cy="34" r="3"/>
+    <circle cx="70" cy="34" r="3"/>
+    <circle cx="30" cy="52" r="3"/>
+    <circle cx="42" cy="52" r="3"/>
+    <circle cx="54" cy="52" r="3"/>
+    <circle cx="66" cy="52" r="3"/>
+    <circle cx="32" cy="70" r="3"/>
+    <circle cx="46" cy="70" r="3"/>
+    <circle cx="60" cy="70" r="3"/>
+    <circle cx="74" cy="70" r="3"/>
+  </g>
+  <!-- water pipe down the side -->
+  <rect x="80" y="20" width="3" height="60" fill="#4A8BC2"/>
+  <circle cx="81.5" cy="28" r="1.5" fill="#9CD7FF"/>
+  <circle cx="81.5" cy="46" r="1.5" fill="#9CD7FF"/>
+  <circle cx="81.5" cy="64" r="1.5" fill="#9CD7FF"/>
+</svg>

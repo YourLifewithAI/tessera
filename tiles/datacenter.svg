@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Data Center: server racks with LED stacks + cooling-fluid lines + AI core glow. -->
+  <rect width="100" height="100" rx="6" fill="#1A1E26"/>
+  <rect width="100" height="100" rx="6" fill="#7B2CBF" opacity="0.10"/>
+  <rect y="84" width="100" height="16" fill="#0B0D12"/>
+  <!-- AI core glow (top center) -->
+  <circle cx="50" cy="18" r="7" fill="#A675FF" opacity="0.4"/>
+  <circle cx="50" cy="18" r="4" fill="#C9A8FF"/>
+  <circle cx="50" cy="18" r="1.5" fill="#FFFFFF"/>
+  <!-- power/cool lines from core to racks -->
+  <g stroke="#A675FF" stroke-width="1.5" opacity="0.6" fill="none">
+    <path d="M 50 22 Q 22 30 22 36"/>
+    <path d="M 50 22 Q 50 30 50 36"/>
+    <path d="M 50 22 Q 78 30 78 36"/>
+  </g>
+  <!-- three server racks -->
+  <g>
+    <rect x="12"  y="36" width="20" height="48" fill="#3D1F66" stroke="#7B2CBF" stroke-width="1.5"/>
+    <rect x="40"  y="36" width="20" height="48" fill="#3D1F66" stroke="#7B2CBF" stroke-width="1.5"/>
+    <rect x="68"  y="36" width="20" height="48" fill="#3D1F66" stroke="#7B2CBF" stroke-width="1.5"/>
+  </g>
+  <!-- LED stripe stacks -->
+  <g fill="#C9A8FF">
+    <rect x="14" y="40" width="16" height="2.2"/>
+    <rect x="14" y="46" width="16" height="2.2"/>
+    <rect x="14" y="52" width="16" height="2.2"/>
+    <rect x="14" y="58" width="16" height="2.2"/>
+    <rect x="14" y="64" width="16" height="2.2"/>
+    <rect x="14" y="70" width="16" height="2.2"/>
+    <rect x="14" y="76" width="16" height="2.2"/>
+    <rect x="42" y="40" width="16" height="2.2"/>
+    <rect x="42" y="46" width="16" height="2.2"/>
+    <rect x="42" y="52" width="16" height="2.2"/>
+    <rect x="42" y="58" width="16" height="2.2"/>
+    <rect x="42" y="64" width="16" height="2.2"/>
+    <rect x="42" y="70" width="16" height="2.2"/>
+    <rect x="42" y="76" width="16" height="2.2"/>
+    <rect x="70" y="40" width="16" height="2.2"/>
+    <rect x="70" y="46" width="16" height="2.2"/>
+    <rect x="70" y="52" width="16" height="2.2"/>
+    <rect x="70" y="58" width="16" height="2.2"/>
+    <rect x="70" y="64" width="16" height="2.2"/>
+    <rect x="70" y="70" width="16" height="2.2"/>
+    <rect x="70" y="76" width="16" height="2.2"/>
+  </g>
+  <!-- live indicators -->
+  <g fill="#6BD89D">
+    <circle cx="28" cy="42"  r="1"/>
+    <circle cx="56" cy="60"  r="1"/>
+    <circle cx="84" cy="48"  r="1"/>
+    <circle cx="28" cy="76"  r="1"/>
+  </g>
+</svg>
