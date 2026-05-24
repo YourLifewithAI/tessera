@@ -1176,7 +1176,10 @@
     const existing = document.getElementById('research-overlay');
     if (existing) existing.remove();
     const RES = window.RESEARCH || {};
-    const G = window.RESEARCH_GRID || { cols: 3, rows: 6, cardWidth: 220, cardHeight: 96, colGap: 32, rowGap: 28, paddingX: 24, paddingY: 24 };
+    const baseG = window.RESEARCH_GRID || { cols: 3, rows: 6, cardWidth: 220, cardHeight: 96, colGap: 32, rowGap: 28, paddingX: 24, paddingY: 24 };
+    // On narrow viewports, cards include an inline description and need more height to avoid overlap with the row below.
+    const isNarrow = window.matchMedia && window.matchMedia('(max-width: 720px)').matches;
+    const G = isNarrow ? Object.assign({}, baseG, { cardHeight: 156 }) : baseG;
     const innerW = G.cols * G.cardWidth + (G.cols - 1) * G.colGap + 2 * G.paddingX;
     const innerH = G.rows * G.cardHeight + (G.rows - 1) * G.rowGap + 2 * G.paddingY;
 
@@ -1294,6 +1297,7 @@
         meta.textContent += ` · req: ${names.join(', ')}`;
       }
       card.appendChild(meta);
+      if (r.description) card.appendChild(el('div', 'rn-desc', r.description));
 
       // Tooltip with description + effects + real-world note.
       const tip = [r.description];
