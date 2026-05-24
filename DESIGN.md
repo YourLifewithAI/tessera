@@ -86,6 +86,61 @@ These are *gestural* profiles for v0, not policy science. Refine with real surve
 
 ---
 
+## Place data (v0.2)
+
+Tessera baseline data is anchored to **January 1, 2025**. A play session represents the present (**Q2 2026**). The Jan 2025 → present stretch is *backstory* — applied as a stream of dated updates with `reason` strings to derive the player's starting state. Players see "how we got here" before they ever place a tile.
+
+### What we ship vs. what forks supply
+
+We ship the **schema** and the **adapter contract**, plus one demo place (Burleson County, TX) so the game runs out of the box. We do not ship comprehensive per-place data. Forks populate places one of two ways:
+
+1. **Local subscription pattern.** Drop a JS file in `data/places/` that registers itself on `window.TesseraPlaces`. Add a `<script>` tag in `index.html`. The default adapter picks it up. This is the path for hand-curated data or for shipping a data pack alongside a fork.
+2. **Custom adapter.** Replace `window.TesseraData` with any object implementing the three contract methods (see below). Fetch from a real API with the player's own key, read from IndexedDB, pull from a subscription feed — whatever the fork wants.
+
+Either way, sensitive data and API keys stay on the player's machine. The base repo ships no keys.
+
+### Adapter contract
+
+```js
+// Any object on window.TesseraData with these three methods:
+listPlaces():        Array<{ id, displayName, state, county }>
+getBaseline(placeId): BaselineRecord | null   // Jan 2025 snapshot
+getUpdates(placeId):  Array<UpdateRecord>     // chronological
+```
+
+The shipped scaffold also provides `derivePresent(placeId, asOfDate)` which applies updates in order to the baseline and returns `{ present, appliedUpdates }`.
+
+### Data model (county + city)
+
+Each place is a **county** carrying macro-level data (demographics, generation mix, water, traffic, existing data centers and large industrial sites) with a list of **cities** under it carrying the felt-experience data (per-city sentiment, expressed needs, expressed concerns, adjacencies). The Tessera is conceptually built *in* a city; adjacent cities feel the spillover.
+
+- **Sentiment** is a distribution per topic: `{ for, against, dontKnow }` summing to 1.0. Topics align with tile ids (`smr`, `datacenter`, `fab`, `robotics`, `housing`, `farm`, `civic`, `coordination`). The 3-category form replaces the −2..+2 state scalar at the city level; the scalar still drives the headline modifier as a fallback when no place is loaded.
+- **Expressed needs** name `addressedBy: [tileId, ...]` — placing one of those tiles is what would address the need. Priority is `low | medium | high`.
+- **Expressed concerns** name `triggeredBy: [tileId, ...]` — placing one of those tiles is what would set the concern off.
+
+### City needs/concerns rule (the spillover mechanic)
+
+When the player places a tile, every city in the loaded place reacts:
+
+- For each expressed **need** addressed: `+priority` to goodwill (low=+1, medium=+2, high=+3).
+- For each expressed **concern** triggered: `-priority` to goodwill.
+- Active city contributes at weight **1.0**. Other cities (spillover) at **0.4**.
+
+The reaction popup names which cities reacted and why ("Caldwell: addresses healthcare access (+3) · Snook: triggers water draw (-1)"). The active city defaults to the county seat; the player switches it by clicking a city chip in the place-context panel.
+
+### Updates stream
+
+Each `UpdateRecord` carries `date` (YYYY-MM), `scope` (`"county"` or `"city:<id>"`), `field` (dotted path), one of `{ change | set | add }`, and a `reason` string. The reason is the most important field — it's what tells the player why the world they're inheriting looks the way it does. Examples in `data/places/tx-burleson.js`.
+
+### What this does NOT do yet
+
+- No per-tick mutation of place sentiment from gameplay (placement updates goodwill but not the underlying `sentiment.{topic}` distributions). A v0.3 pass can feed gameplay events back into the place record.
+- No animated "how we got here" timeline scrub. The history panel is a static list, expandable from the place-context bar.
+- No multi-place gameplay. One place per session.
+- No persistence between sessions.
+
+---
+
 ## Economic substrate (v0.1)
 
 The foundation pass adds an explicit economic layer beneath the social-license game. The thesis remains: **the hard part is the community.** Economics is a means of making lived experience and regional spillover legible — not the new win condition.

@@ -33,7 +33,7 @@
 
   // ----- State -----
   const state = {
-    screen: 'STATE_SELECT', // 'STATE_SELECT' | 'GAME_BOARD' | 'WIN'
+    screen: 'STATE_SELECT', // 'STATE_SELECT' | 'PLACE_SELECT' | 'GAME_BOARD' | 'WIN'
     selectedStateCode: '',
     terrain: [],                // 2D array [y][x] of terrain string
     placed: {},                 // "x,y" -> tile id
@@ -62,6 +62,10 @@
     jobsOps: 0,                  // current operating headcount across all tiles
     lastJobsBonusYear: -1,       // jobs-rule fires at most once per game-year
     policies: {},                // placeholder hook for the next pass (CBAs, PILOTs, zoning)
+    // ----- v0.2 place data -----
+    placeId: '',                 // selected place id, or '' for state-only flow
+    placeData: null,             // { present, appliedUpdates } from TesseraData.derivePresent
+    activeCityId: null,          // city where the Tessera is "being built" (county seat by default)
   };
 
   // ----- DOM root -----
@@ -96,7 +100,7 @@
   // Game start / reset
   // ===============================================================
 
-  function startGame(stateCode) {
+  function startGame(stateCode, placeId) {
     state.selectedStateCode = stateCode;
     state.screen = 'GAME_BOARD';
     state.placed = {};
@@ -118,6 +122,22 @@
     state.jobsOps = 0;
     state.lastJobsBonusYear = -1;
     state.policies = {};
+    state.placeId = placeId || '';
+    state.placeData = null;
+    state.activeCityId = null;
+    if (placeId && window.TesseraData) {
+      try {
+        const result = window.TesseraData.derivePresent(placeId, '2026-05-01');
+        if (result) {
+          state.placeData = result;
+          const seat = (result.present.cities || []).find(c => c.isCountySeat)
+                    || (result.present.cities || [])[0];
+          if (seat) state.activeCityId = seat.id;
+        }
+      } catch (e) {
+        console.warn('TesseraData.derivePresent failed', e);
+      }
+    }
     generateTerrain(stateCode);
     const sName = window.STATES[stateCode].name;
     setReaction(`Welcome to ${sName}. Lead with civic and housing; build trust before you site the reactor.`, 'accent');
@@ -230,9 +250,15 @@
     if (def.baseGoodwill !== 0 && delta === 0) {
       delta = def.baseGoodwill > 0 ? 1 : -1;
     }
+    // v0.2 city needs/concerns layer (only when a place is loaded).
+    const cityResult = applyCityNeedsRule(tileId);
+    delta += cityResult.delta;
     state.goodwill = clamp(state.goodwill + delta, -100, 200);
     const paper = window.STATES[state.selectedStateCode].flavor_paper || "Local Herald";
-    const headline = window.headlineFor(tileId, delta, paper);
+    let headline = window.headlineFor(tileId, delta, paper);
+    if (cityResult.fragments.length) {
+      headline += ' — ' + cityResult.fragments.join(' · ');
+    }
     setReaction(headline, delta >= 0 ? 'ok' : 'bad');
     checkTesserae();
     renderGameBoard();
@@ -427,7 +453,17 @@
       btn.appendChild(bars);
       btn.addEventListener('mouseenter', () => { state.hoverStateCode = code; updateStateDetail(); });
       btn.addEventListener('focus', () => { state.hoverStateCode = code; updateStateDetail(); });
-      btn.addEventListener('click', () => startGame(code));
+      btn.addEventListener('click', () => {
+        const places = (window.TesseraData && window.TesseraData.listPlacesForState)
+          ? window.TesseraData.listPlacesForState(code) : [];
+        if (places.length > 0) {
+          state.selectedStateCode = code;
+          state.screen = 'PLACE_SELECT';
+          renderPlaceSelect(places);
+        } else {
+          startGame(code, null);
+        }
+      });
       grid.appendChild(btn);
     }
     screen.appendChild(grid);
@@ -438,6 +474,42 @@
     screen.appendChild(detail);
 
     screen.appendChild(el('div', 'state-footer', 'Each state\'s profile shapes how the community reacts to each tile. Hover the buttons above to see sentiment bars: green is receptive, red is hostile.'));
+
+    app.appendChild(screen);
+  }
+
+  // ----- Place select -----
+  function renderPlaceSelect(places) {
+    clearApp();
+    const screen = el('div', 'screen-place-select');
+    const sName = window.STATES[state.selectedStateCode].name;
+    screen.appendChild(el('h1', 'title', sName.toUpperCase()));
+    screen.appendChild(el('p', 'subtitle', 'Pick a place to host your Tessera.'));
+    screen.appendChild(el('p', 'cta', 'County data shapes economics. City data shapes who lives nearby and how they feel about it.'));
+
+    const grid = el('div', 'place-grid');
+    for (const p of places) {
+      const btn = el('button', 'place-btn');
+      btn.appendChild(el('span', 'place-name', p.displayName));
+      const baseline = window.TesseraData.getBaseline(p.id);
+      const cityCount = baseline && baseline.cities ? baseline.cities.length : 0;
+      const pop = baseline && baseline.county ? baseline.county.population : null;
+      const meta = `${cityCount} cities · pop ${pop ? pop.toLocaleString() : '—'} · baseline ${baseline ? baseline.baselineDate : '?'}`;
+      btn.appendChild(el('span', 'place-meta', meta));
+      btn.addEventListener('click', () => startGame(state.selectedStateCode, p.id));
+      grid.appendChild(btn);
+    }
+    screen.appendChild(grid);
+
+    const skip = el('button', 'place-skip', `Play ${sName} without a specific place (state-level sentiment only)`);
+    skip.addEventListener('click', () => startGame(state.selectedStateCode, null));
+    screen.appendChild(skip);
+
+    const back = el('button', 'place-back', '← Back to state picker');
+    back.addEventListener('click', () => { state.screen = 'STATE_SELECT'; renderStateSelect(); });
+    screen.appendChild(back);
+
+    screen.appendChild(el('div', 'state-footer', 'Place data is loaded via the TesseraData adapter. Forkers: drop a JS file in data/places/ or wire up a custom adapter. See HACKING.md.'));
 
     app.appendChild(screen);
   }
@@ -459,13 +531,14 @@
   // ----- Game board -----
   function renderGameBoard() {
     clearApp();
-    const screen = el('div', 'screen-game-board');
+    const screen = el('div', 'screen-game-board' + (state.placeData ? ' with-place' : ''));
     screen.id = 'screen-game-board';
     screen.appendChild(buildHud());
     screen.appendChild(buildBoard());
     screen.appendChild(buildTray());
     screen.appendChild(buildSelectedDesc());
     screen.appendChild(buildReaction());
+    if (state.placeData) screen.appendChild(buildPlaceContext());
     app.appendChild(screen);
   }
 
@@ -689,6 +762,112 @@
     const old = document.getElementById('reaction-wrap');
     if (!old) return;
     old.replaceWith(buildReaction());
+  }
+
+  // ----- Place context panel (v0.2) -----
+  function buildPlaceContext() {
+    const wrap = el('div', 'place-context');
+    wrap.id = 'place-context';
+    if (!state.placeData) return wrap;
+    const present = state.placeData.present;
+    const updates = state.placeData.appliedUpdates || [];
+    const header = el('div', 'pc-header');
+    header.appendChild(el('span', 'pc-title', present.displayName));
+    header.appendChild(el('span', 'pc-sub',
+      ` · pop ${present.county.population.toLocaleString()}` +
+      ` · ${present.cities.length} cities` +
+      ` · ${updates.length} updates since ${present.baselineDate}`));
+    wrap.appendChild(header);
+    // City row — one chip per city; active city is highlighted; click to switch.
+    const cityRow = el('div', 'pc-cities');
+    for (const c of present.cities) {
+      const isActive = c.id === state.activeCityId;
+      const chip = el('button', 'pc-city' + (isActive ? ' active' : ''));
+      chip.innerHTML = `<b>${c.name}</b><br><span class="pc-pop">${c.population.toLocaleString()}</span>`;
+      chip.title = needsConcernsTooltip(c);
+      chip.addEventListener('click', () => {
+        state.activeCityId = c.id;
+        const old = document.getElementById('place-context');
+        if (old) old.replaceWith(buildPlaceContext());
+      });
+      cityRow.appendChild(chip);
+    }
+    wrap.appendChild(cityRow);
+    // History strip — collapsed by default. Click to expand.
+    const histToggle = el('button', 'pc-history-toggle', `▸ How we got here (${updates.length} updates)`);
+    const hist = el('div', 'pc-history');
+    hist.style.display = 'none';
+    for (const u of updates) {
+      const row = el('div', 'pc-history-row');
+      row.appendChild(el('span', 'pc-date', u.date));
+      row.appendChild(el('span', 'pc-scope', u.scope || 'place'));
+      row.appendChild(el('span', 'pc-field', u.field));
+      row.appendChild(el('span', 'pc-reason', u.reason || ''));
+      hist.appendChild(row);
+    }
+    histToggle.addEventListener('click', () => {
+      const open = hist.style.display !== 'none';
+      hist.style.display = open ? 'none' : 'block';
+      histToggle.textContent = (open ? '▸' : '▾') + ` How we got here (${updates.length} updates)`;
+    });
+    wrap.appendChild(histToggle);
+    wrap.appendChild(hist);
+    return wrap;
+  }
+
+  function needsConcernsTooltip(c) {
+    const lines = [c.name];
+    if (c.expressedNeeds && c.expressedNeeds.length) {
+      lines.push('Needs:');
+      for (const n of c.expressedNeeds) lines.push(`  · ${n.issue} (${n.priority})`);
+    }
+    if (c.expressedConcerns && c.expressedConcerns.length) {
+      lines.push('Concerns:');
+      for (const k of c.expressedConcerns) lines.push(`  · ${k.issue} (${k.priority})`);
+    }
+    return lines.join('\n');
+  }
+
+  // ----- City needs/concerns rule (v0.2) -----
+  //
+  // When a tile is placed, every city in the loaded place reacts:
+  //   - +priority bonus if the tile addresses a city's expressed need
+  //   - -priority penalty if the tile triggers a city's expressed concern
+  // The active city is weighted 1.0; other cities (spillover) at 0.4.
+  // Priority weights: low=1, medium=2, high=3.
+  // Returns { delta, fragments } where fragments is an array of short
+  // human-readable strings to append to the placement reaction.
+  function applyCityNeedsRule(tileId) {
+    const out = { delta: 0, fragments: [] };
+    if (!state.placeData) return out;
+    const present = state.placeData.present;
+    const cities = present.cities || [];
+    const pri = { low: 1, medium: 2, high: 3 };
+    for (const c of cities) {
+      const weight = (c.id === state.activeCityId) ? 1.0 : 0.4;
+      let cityDelta = 0;
+      const reasons = [];
+      for (const n of (c.expressedNeeds || [])) {
+        if (n.addressedBy && n.addressedBy.indexOf(tileId) !== -1) {
+          const bump = (pri[n.priority] || 1);
+          cityDelta += bump;
+          reasons.push(`addresses ${n.issue}`);
+        }
+      }
+      for (const k of (c.expressedConcerns || [])) {
+        if (k.triggeredBy && k.triggeredBy.indexOf(tileId) !== -1) {
+          const drag = (pri[k.priority] || 1);
+          cityDelta -= drag;
+          reasons.push(`triggers ${k.issue}`);
+        }
+      }
+      const weighted = Math.round(cityDelta * weight);
+      if (weighted !== 0) {
+        out.delta += weighted;
+        out.fragments.push(`${c.name}: ${reasons.join(', ')} (${signed(weighted)})`);
+      }
+    }
+    return out;
   }
 
   // ----- Win overlay -----

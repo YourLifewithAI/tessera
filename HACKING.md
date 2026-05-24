@@ -8,11 +8,13 @@ The whole project is vanilla HTML, CSS, and JavaScript. No framework. No build s
 
 | File | What's in it |
 |---|---|
-| `index.html` | Page shell. Loads CSS and three JS files. |
+| `index.html` | Page shell. Loads CSS, data files, place files, and `game.js`. |
 | `style.css` | Everything visual. CSS variables at the top of `:root` are the theme tokens. |
 | `game.js` | The whole game: state object, render functions per screen, event handlers, tick loop. |
 | `data/tiles.js` | The nine tile definitions and headline templates. Pure data — mod freely. |
 | `data/states.js` | The 50 state sentiment profiles. Pure data — mod freely. |
+| `data/tessera-data.js` | Place-data adapter scaffold. Defines `window.TesseraData` and the default registry adapter. |
+| `data/places/*.js` | One file per "place" (county + cities). Each registers itself on `window.TesseraPlaces`. |
 | `tiles/*.svg` | One SVG per tile. Replace any file with your own art; the game picks it up automatically. |
 | `icon.svg` | App icon / favicon. |
 | `DESIGN.md` | The design doc. Read this before modding mechanics. |
@@ -96,6 +98,38 @@ A few rules of thumb:
 - `waterDrawPerTick` typically `−3 … +8`. Negative for closed-loop net producers (vertical farm).
 
 If your tile has revenue, it will benefit from the TFP boost when placed near a Coordination Node or Civic Center (+5% per neighbor within Tessera radius, capped at +25%).
+
+### Add a new place (the "local subscription" pattern)
+
+A place is a county-level record with one or more cities under it. Baseline data is anchored to Jan 1, 2025; a stream of dated updates carries it to the present.
+
+1. Copy `data/places/tx-burleson.js` to `data/places/<your-place>.js`. It's the worked example.
+2. Edit the new file:
+   - `placeId` is the registry key; use `state-county` (e.g., `"va-loudoun"`).
+   - `baseline.county` carries demographics, power generation mix, water, traffic, existing data centers and large industrial sites.
+   - `baseline.cities` is a list. Each city carries `sentiment` (distributions of `for/against/dontKnow` per topic, summing to 1.0), `expressedNeeds` (each with `addressedBy: [tileId, ...]`), and `expressedConcerns` (each with `triggeredBy: [tileId, ...]`).
+   - `updates` is a chronological list of dated deltas — `{ date, scope, field, change|set|add, reason }`. The `reason` field is what the player sees in the "how we got here" panel; write it like a sentence.
+3. Add a `<script src="data/places/<your-place>.js"></script>` line to `index.html` (under the existing place file).
+4. Refresh. Pick the state in the state-select; the place picker now lists your place.
+
+The game will:
+- Apply your updates to the baseline up to the cutoff date (May 2026 by default).
+- Show a place-context panel under the game board: city chips, expressed needs/concerns on hover, an expandable "how we got here" history of updates.
+- On each tile placement, score every city's needs and concerns; the active city contributes at weight 1.0 and the others at 0.4. The combined delta appends to the placement headline naming which cities reacted and why.
+
+### Write a custom adapter (fetch, IndexedDB, subscription feed)
+
+If you want to load places from somewhere other than registered JS files, replace `window.TesseraData` *before* `game.js` loads. The contract is three methods:
+
+```js
+window.TesseraData = {
+  listPlaces() { /* return Array<{ id, displayName, state, county }> */ },
+  getBaseline(placeId) { /* return BaselineRecord or null */ },
+  getUpdates(placeId) { /* return Array<UpdateRecord>, chronological */ },
+};
+```
+
+The scaffold's `derivePresent` helper (in `data/tessera-data.js`) is rewired automatically onto whatever adapter you install. Keep API keys on the player's side — don't bake them into the fork. See the demo adapter at the top of `data/tessera-data.js` for the simplest possible reference.
 
 ### Add a new layer
 
