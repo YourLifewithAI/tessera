@@ -1092,16 +1092,14 @@
     restoreBoardScroll();
   }
 
-  // Compact details strip pinned to bottom of the board on mobile when a cell
-  // is highlighted. Replaces the desktop "selected-tile-desc" bar for mobile use.
+  // Tooltip-style popover anchored next to the highlighted cell. Hidden when
+  // nothing is selected. Replaces the old bottom-pinned strip.
   function buildCellDetails() {
     const wrap = el('div', 'cell-details');
     wrap.id = 'cell-details';
     const hl = state.highlightedCellXY;
     if (!hl) {
-      wrap.classList.add('placeholder');
-      wrap.appendChild(el('div', 'cd-title', 'Tap a cell to inspect'));
-      wrap.appendChild(el('div', 'cd-meta', 'Then tap ⌂ Build to place a tile.'));
+      wrap.classList.add('hidden');
       return wrap;
     }
     const { x, y } = hl;
@@ -1131,6 +1129,9 @@
     close.title = 'Clear selection';
     close.addEventListener('click', (e) => { e.stopPropagation(); clearCellSelection(); });
     wrap.appendChild(close);
+    // Position to the cell after the next paint, once the popover is in
+    // the DOM and we can measure its size.
+    requestAnimationFrame(() => positionCellDetailsToCell(wrap, x, y));
     return wrap;
   }
 
@@ -1138,6 +1139,35 @@
     const old = document.getElementById('cell-details');
     if (!old) return;
     old.replaceWith(buildCellDetails());
+  }
+
+  // Place the cell-details popover next to the highlighted cell, in the
+  // board-wrap scroll-content coord space so it pans with the cell. Falls
+  // back to placing above the cell when there's no room below; clamps to
+  // stay within the scroll content horizontally.
+  function positionCellDetailsToCell(wrap, x, y) {
+    if (!wrap.isConnected) return;
+    const cell = document.querySelector('.cell[data-x="' + x + '"][data-y="' + y + '"]');
+    const boardWrap = document.getElementById('board-wrap');
+    if (!cell || !boardWrap) return;
+    const cellRect = cell.getBoundingClientRect();
+    const wrapRect = boardWrap.getBoundingClientRect();
+    const cellLeft = cellRect.left - wrapRect.left + boardWrap.scrollLeft;
+    const cellTop = cellRect.top - wrapRect.top + boardWrap.scrollTop;
+    const cellH = cellRect.height;
+    const popH = wrap.offsetHeight || 70;
+    const popW = wrap.offsetWidth || 220;
+    let top = cellTop + cellH + 6;
+    if (top + popH > boardWrap.scrollHeight - 4) {
+      top = Math.max(4, cellTop - popH - 6);
+    }
+    let left = cellLeft;
+    if (left + popW > boardWrap.scrollWidth - 4) {
+      left = boardWrap.scrollWidth - popW - 4;
+    }
+    if (left < 4) left = 4;
+    wrap.style.left = left + 'px';
+    wrap.style.top = top + 'px';
   }
 
   // Floating reaction-card stack on the mobile board. Each card is auto-dismissed
