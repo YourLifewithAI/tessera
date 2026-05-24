@@ -85,6 +85,10 @@
       ticksRemaining: 0,         // quarters left on in-progress research
     },
     researchPanelOpen: false,    // modal toggle
+    // ----- v0.7 mobile UX -----
+    highlightedCellXY: null,     // { x, y } | null — cell tapped on mobile
+    mobileSheet: '',             // '' | 'build' | 'place' | 'menu' (research uses its own overlay)
+    reactionCards: [],           // [{ id, msg, tone }] — floating cards on mobile board
   };
 
   // ----- DOM root -----
@@ -261,9 +265,28 @@
     state.reactionTimerHandle = setTimeout(() => {
       if (state.reaction && state.reaction.id === myId) {
         state.reaction = null;
-        if (state.screen === 'GAME_BOARD') renderGameBoard();
+        if (state.screen === 'GAME_BOARD') renderReaction();
       }
     }, REACTION_FADE_MS);
+    // v0.7: also push a floating card for the mobile board overlay.
+    pushReactionCard(msg, tone);
+  }
+
+  // v0.7: floating reaction-card stack rendered over the board on mobile.
+  // setReaction always pushes one; the stack is hidden via CSS on desktop.
+  function pushReactionCard(msg, tone) {
+    const id = Math.random();
+    state.reactionCards.push({ id, msg, tone });
+    while (state.reactionCards.length > 3) state.reactionCards.shift();
+    renderReactionOverlay();
+    setTimeout(() => {
+      state.reactionCards = state.reactionCards.filter(c => c.id !== id);
+      renderReactionOverlay();
+    }, 4000);
+  }
+
+  function isMobile() {
+    return !!(window.matchMedia && window.matchMedia('(max-width: 720px)').matches);
   }
 
   // ===============================================================
@@ -798,7 +821,11 @@
     screen.appendChild(buildSelectedDesc());
     screen.appendChild(buildReaction());
     if (state.placeData) screen.appendChild(buildPlaceContext());
+    // v0.7: mobile-only bottom nav, last in DOM. Hidden on desktop via CSS.
+    screen.appendChild(buildMobileNav());
     app.appendChild(screen);
+    // Apply persisted zoom (or platform default).
+    applyCellPx(getCurrentCellPx());
   }
 
   function buildHud() {
@@ -901,8 +928,10 @@
 
   function buildBoard() {
     const wrap = el('div', 'board-wrap');
+    wrap.id = 'board-wrap';
     const board = el('div', 'board');
     board.id = 'board';
+    const hl = state.highlightedCellXY;
     for (let y = 0; y < BOARD_H; y++) {
       for (let x = 0; x < BOARD_W; x++) {
         const t = state.terrain[y][x];
@@ -934,17 +963,54 @@
         } else if (tInfo.hint) {
           titleParts.push(tInfo.hint);
         }
+        if (hl && hl.x === x && hl.y === y) {
+          cell.classList.add('highlighted');
+          const badge = el('div', 'cell-badge');
+          cell.appendChild(badge);
+        }
         cell.title = titleParts.join(' · ');
-        cell.addEventListener('click', () => {
+        cell.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (isMobile()) {
+            if (state.selectedTileId) {
+              tryPlace(x, y);
+              state.selectedTileId = '';  // disarm after place
+              return;
+            }
+            selectCell(x, y);
+            return;
+          }
           if (!state.selectedTileId) return;
           tryPlace(x, y);
         });
         board.appendChild(cell);
       }
     }
-    wrap.appendChild(board);
+    // Legend pinned ABOVE the board on both platforms (mobile + desktop).
     wrap.appendChild(buildLegend());
+    wrap.appendChild(board);
+    attachZoomControls(wrap);
+    // Mobile-only overlays — hidden via CSS on desktop.
+    wrap.appendChild(buildReactionOverlay());
+    wrap.appendChild(buildCellDetails());
+    // Tap-away on the board-wrap clears cell selection.
+    wrap.addEventListener('click', (e) => {
+      if (!isMobile()) return;
+      // Only clear if the click is on the board-wrap padding, not a cell or overlay child.
+      if (e.target === wrap || e.target === board) {
+        clearCellSelection();
+      }
+    });
     return wrap;
+  }
+
+  // v0.7: render only the inner board grid (cells), keeping the rest of board-wrap intact.
+  // Used after cell selection changes so we don't rebuild the world.
+  function renderBoard() {
+    const wrap = document.getElementById('board-wrap');
+    if (!wrap) return;
+    const fresh = buildBoard();
+    wrap.replaceWith(fresh);
   }
 
   function buildLegend() {
@@ -963,10 +1029,285 @@
     return legend;
   }
 
-  function buildTray() {
+  // ===============================================================
+  // v0.7 — Mobile-first interaction (cell-first, bottom nav, sheets)
+  // ===============================================================
+
+  function selectCell(x, y) {
+    const hl = state.highlightedCellXY;
+    if (hl && hl.x === x && hl.y === y) {
+      state.highlightedCellXY = null;
+    } else {
+      state.highlightedCellXY = { x, y };
+    }
+    renderBoard();
+    renderMobileNav();
+  }
+
+  function clearCellSelection() {
+    if (!state.highlightedCellXY) return;
+    state.highlightedCellXY = null;
+    renderBoard();
+    renderMobileNav();
+  }
+
+  // Compact details strip pinned to bottom of the board on mobile when a cell
+  // is highlighted. Replaces the desktop "selected-tile-desc" bar for mobile use.
+  function buildCellDetails() {
+    const wrap = el('div', 'cell-details');
+    wrap.id = 'cell-details';
+    const hl = state.highlightedCellXY;
+    if (!hl) {
+      wrap.classList.add('placeholder');
+      wrap.appendChild(el('div', 'cd-title', 'Tap a cell to inspect'));
+      wrap.appendChild(el('div', 'cd-meta', 'Then tap ⌂ Build to place a tile.'));
+      return wrap;
+    }
+    const { x, y } = hl;
+    const k = key(x, y);
+    const t = state.terrain[y][x];
+    const tInfo = TERRAIN_INFO[t] || { name: t, hint: '' };
+    const tileId = state.placed[k];
+    const isCivic = !!state.existingCivic[k];
+    let title, meta;
+    if (tileId) {
+      const def = getEffectiveTile(tileId);
+      title = `${def.name}  ·  (${x}, ${y})`;
+      const capex = def.capex ?? def.cost ?? 0;
+      meta = `${formatDollars(capex)} built · J${def.jobsOps || 0} · E${signed(def.emissionsPerTick || 0)} · ${def.layer}`;
+    } else if (isCivic) {
+      title = `Existing civic  ·  (${x}, ${y})`;
+      meta = 'Cannot build — pre-existing community asset.';
+    } else {
+      title = `${tInfo.name}  ·  (${x}, ${y})`;
+      meta = tInfo.build
+        ? (tInfo.hint || 'Tap Build to place a tile here.')
+        : (tInfo.hint || 'Cannot build on this terrain.');
+    }
+    wrap.appendChild(el('div', 'cd-title', title));
+    wrap.appendChild(el('div', 'cd-meta', meta));
+    const close = el('button', 'cd-close', '×');
+    close.title = 'Clear selection';
+    close.addEventListener('click', (e) => { e.stopPropagation(); clearCellSelection(); });
+    wrap.appendChild(close);
+    return wrap;
+  }
+
+  function renderCellDetails() {
+    const old = document.getElementById('cell-details');
+    if (!old) return;
+    old.replaceWith(buildCellDetails());
+  }
+
+  // Floating reaction-card stack on the mobile board. Each card is auto-dismissed
+  // from pushReactionCard()'s setTimeout; this just renders the current list.
+  function buildReactionOverlay() {
+    const overlay = el('div', 'reaction-overlay');
+    overlay.id = 'reaction-overlay';
+    for (const c of state.reactionCards) {
+      const card = el('div', 'reaction-card ' + (c.tone || ''));
+      card.textContent = c.msg;
+      card.addEventListener('click', () => {
+        state.reactionCards = state.reactionCards.filter(x => x.id !== c.id);
+        renderReactionOverlay();
+      });
+      overlay.appendChild(card);
+    }
+    return overlay;
+  }
+
+  function renderReactionOverlay() {
+    const old = document.getElementById('reaction-overlay');
+    if (!old) return;
+    old.replaceWith(buildReactionOverlay());
+  }
+
+  // Zoom +/- floating in the top-right of the board area. localStorage-persisted.
+  // Both platforms; clamps 22-60px. Inline --cell on :root drives mobile size too,
+  // since v0.7 dropped the mobile clamp() rule in favor of a JS-driven default.
+  function attachZoomControls(wrap) {
+    const controls = el('div', 'zoom-controls');
+    controls.id = 'zoom-controls';
+    const minus = el('button', 'zoom-btn', '−');
+    minus.title = 'Zoom out';
+    minus.addEventListener('click', (e) => { e.stopPropagation(); changeZoom(-4); });
+    const plus = el('button', 'zoom-btn', '+');
+    plus.title = 'Zoom in';
+    plus.addEventListener('click', (e) => { e.stopPropagation(); changeZoom(+4); });
+    controls.appendChild(minus);
+    controls.appendChild(plus);
+    wrap.appendChild(controls);
+  }
+
+  function getCurrentCellPx() {
+    // Either the persisted/explicit value, or a sensible default per platform.
+    const stored = parseInt(localStorage.getItem('tessera.cellPx') || '', 10);
+    if (stored >= 22 && stored <= 60) return stored;
+    if (isMobile()) {
+      // Default to finger-tap-sized cells; board scrolls horizontally.
+      // User can zoom out to ~22 to see the whole board at once.
+      return 40;
+    }
+    return 38;
+  }
+
+  function applyCellPx(px) {
+    document.documentElement.style.setProperty('--cell', px + 'px');
+  }
+
+  function changeZoom(delta) {
+    const cur = getCurrentCellPx();
+    const next = clamp(cur + delta, 22, 60);
+    if (next === cur) return;
+    localStorage.setItem('tessera.cellPx', String(next));
+    applyCellPx(next);
+  }
+
+  // Persistent 4-button nav at the bottom on mobile. Hidden via CSS on desktop.
+  function buildMobileNav() {
+    const nav = el('div', 'mobile-nav');
+    nav.id = 'mobile-nav';
+    const hl = state.highlightedCellXY;
+    const hlEmpty = hl && !state.placed[key(hl.x, hl.y)] && !state.existingCivic[key(hl.x, hl.y)]
+                    && state.terrain[hl.y][hl.x] !== 'river' && state.terrain[hl.y][hl.x] !== 'highway';
+    const items = [
+      { id: 'build',    icon: '⌂', label: 'Build',    glow: !!hlEmpty },
+      { id: 'research', icon: '⚗', label: 'Research' },
+      { id: 'place',    icon: '◉', label: 'Place',    disabled: !state.placeData },
+      { id: 'menu',     icon: '≡', label: 'Menu' },
+    ];
+    for (const it of items) {
+      const btn = el('button', 'mnav-btn' + (it.glow ? ' glow' : '') + (it.disabled ? ' disabled' : ''));
+      btn.dataset.nav = it.id;
+      if (it.disabled) btn.disabled = true;
+      btn.appendChild(el('span', 'mnav-icon', it.icon));
+      btn.appendChild(el('span', 'mnav-label', it.label));
+      btn.addEventListener('click', () => openMobileSheet(it.id));
+      nav.appendChild(btn);
+    }
+    return nav;
+  }
+
+  function renderMobileNav() {
+    const old = document.getElementById('mobile-nav');
+    if (!old) return;
+    old.replaceWith(buildMobileNav());
+    renderCellDetails();
+  }
+
+  // Generic bottom-sheet overlay. Only one sheet open at a time.
+  function openSheet(opts) {
+    closeSheet();
+    const backdrop = el('div', 'sheet-backdrop');
+    backdrop.id = 'sheet-backdrop';
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeSheet(); });
+    const sheet = el('div', 'sheet');
+    const header = el('div', 'sheet-header');
+    header.appendChild(el('span', 'sheet-title', opts.title || ''));
+    const closeBtn = el('button', 'sheet-close', '×');
+    closeBtn.title = 'Close';
+    closeBtn.addEventListener('click', closeSheet);
+    header.appendChild(closeBtn);
+    sheet.appendChild(header);
+    const body = el('div', 'sheet-body');
+    if (opts.content) body.appendChild(opts.content);
+    sheet.appendChild(body);
+    backdrop.appendChild(sheet);
+    document.body.appendChild(backdrop);
+  }
+
+  function closeSheet() {
+    const sb = document.getElementById('sheet-backdrop');
+    if (sb) sb.remove();
+    state.mobileSheet = '';
+  }
+
+  function openMobileSheet(kind) {
+    if (kind === 'research') {
+      openResearchPanel();
+      return;
+    }
+    if (kind === 'build')   { state.mobileSheet = 'build'; openBuildSheet(); return; }
+    if (kind === 'place')   { state.mobileSheet = 'place'; openPlaceSheet(); return; }
+    if (kind === 'menu')    { state.mobileSheet = 'menu';  openMenuSheet();  return; }
+  }
+
+  function openBuildSheet() {
+    const hl = state.highlightedCellXY;
+    const tray = buildTray({
+      onPick: (id) => {
+        closeSheet();
+        if (hl) {
+          state.selectedTileId = id;
+          state.highlightedCellXY = null;
+          tryPlace(hl.x, hl.y);
+          state.selectedTileId = '';
+        } else {
+          // No cell selected — arm the tile so the next cell tap places it.
+          state.selectedTileId = id;
+          setReaction(`${window.TILES[id].name} armed. Tap a cell to place.`, 'accent');
+        }
+      },
+    });
+    const title = hl ? `Build at (${hl.x}, ${hl.y})` : 'Build  ·  tap a cell after picking';
+    openSheet({ title, content: tray });
+  }
+
+  function openPlaceSheet() {
+    if (!state.placeData) {
+      const empty = el('div', 'sheet-empty', 'No place data loaded for this state. Pick a place at start to enable this panel.');
+      openSheet({ title: 'Place', content: empty });
+      return;
+    }
+    openSheet({ title: 'Place', content: buildPlaceContext() });
+  }
+
+  function openMenuSheet() {
+    const body = el('div', 'menu-sheet');
+    // Speed control
+    body.appendChild(el('div', 'menu-section-label', 'TIME'));
+    const speeds = el('div', 'menu-speed-row');
+    for (const s of SPEED_ORDER) {
+      const b = el('button', 'menu-speed-btn' + (state.speed === s ? ' active' : ''));
+      b.textContent = SPEED_LABEL[s] + ' ' + SPEED_NAME[s].split(' ')[0];
+      b.title = SPEED_NAME[s];
+      b.addEventListener('click', () => {
+        setSpeed(s);
+        // re-render the menu so the active button updates
+        openMenuSheet();
+      });
+      speeds.appendChild(b);
+    }
+    body.appendChild(speeds);
+    // Restart / Back
+    body.appendChild(el('div', 'menu-section-label', 'GAME'));
+    const actions = el('div', 'menu-actions-row');
+    const restart = el('button', 'menu-action-btn', 'Restart this run');
+    restart.addEventListener('click', () => {
+      closeSheet();
+      startGame(state.selectedStateCode, state.placeId || null, state.sponsorId || null);
+    });
+    const back = el('button', 'menu-action-btn', 'Back to state select');
+    back.addEventListener('click', () => {
+      closeSheet();
+      backToStateSelect();
+    });
+    actions.appendChild(restart);
+    actions.appendChild(back);
+    body.appendChild(actions);
+    // Info
+    body.appendChild(el('div', 'menu-section-label', 'INFO'));
+    body.appendChild(el('div', 'menu-info', 'Tessera — civic-tech idle/builder. Open-source at github.com/yourlifewithai/tessera.'));
+    openSheet({ title: 'Menu', content: body });
+  }
+
+  function buildTray(opts) {
+    opts = opts || {};
     const wrap = el('div', 'tray-wrap');
     wrap.id = 'tray-wrap';
-    wrap.appendChild(el('div', 'tray-label', 'TILE TRAY  ·  click to select, click board to place'));
+    if (!opts.onPick) {
+      wrap.appendChild(el('div', 'tray-label', 'TILE TRAY  ·  click to select, click board to place'));
+    }
     const tray = el('div', 'tray');
     for (const id of Object.keys(window.TILES)) {
       if (!isTileUnlocked(id)) continue;     // gated by research
@@ -998,6 +1339,10 @@
       body.appendChild(meta);
       row.appendChild(body);
       row.addEventListener('click', () => {
+        if (opts.onPick) {
+          opts.onPick(id);
+          return;
+        }
         state.selectedTileId = (state.selectedTileId === id) ? '' : id;
         renderTray();
         renderSelectedDesc();
@@ -1413,6 +1758,8 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (state.researchPanelOpen) { closeResearchPanel(); return; }
+      if (document.getElementById('sheet-backdrop')) { closeSheet(); return; }
+      if (state.highlightedCellXY) { clearCellSelection(); return; }
       if (state.selectedTileId) {
         state.selectedTileId = '';
         if (state.screen === 'GAME_BOARD') { renderTray(); renderSelectedDesc(); }

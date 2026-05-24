@@ -319,6 +319,167 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: 2px;
 }
 .cell.in-tessera { outline: 2px solid var(--ok); outline-offset: -2px; z-index: 2; }
+/* v0.7 cell-first selection on mobile (also visible on desktop if highlighted). */
+.cell.highlighted { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 3; }
+.cell .cell-badge {
+  position: absolute; right: 2px; top: 2px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--bg-deep);
+  pointer-events: none; z-index: 4;
+}
+
+/* ============================================================
+   v0.7 — Board-area overlays (zoom, reaction cards, cell details)
+   ============================================================ */
+
+.board-wrap { position: relative; }  /* anchor for overlays */
+
+.zoom-controls {
+  position: absolute; top: 10px; right: 10px;
+  display: flex; gap: 4px;
+  background: var(--panel); border: 1px solid var(--panel-high);
+  border-radius: var(--radius); padding: 3px;
+  z-index: 5; box-shadow: var(--shadow);
+}
+.zoom-btn {
+  background: transparent; border: none; color: var(--text);
+  font-size: 18px; line-height: 1; font-weight: 600;
+  width: 32px; height: 32px;
+  border-radius: 4px; cursor: pointer;
+}
+.zoom-btn:hover { background: var(--panel-high); color: var(--accent); }
+@media (max-width: 720px) {
+  .zoom-btn { width: 40px; height: 40px; font-size: 20px; }
+}
+
+.reaction-overlay {
+  position: absolute; top: 10px; left: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+  z-index: 5; pointer-events: none;
+  max-width: calc(100% - 80px);
+}
+@media (max-width: 720px) {
+  /* On mobile, float reactions at the bottom (above the cell-details slot)
+     so they don't cover the legend or the top of the board. */
+  .reaction-overlay {
+    top: auto; bottom: 80px;
+    align-items: flex-start;
+  }
+}
+.reaction-card {
+  pointer-events: auto;
+  background: var(--panel); border-left: 4px solid var(--accent);
+  border-radius: 4px; padding: 6px 10px;
+  font-size: 12px; line-height: 1.3; color: var(--text);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  animation: reactionIn 180ms ease-out, reactionOut 400ms ease-in 3.6s forwards;
+  max-width: 320px;
+}
+.reaction-card.ok  { border-left-color: var(--ok);  }
+.reaction-card.bad { border-left-color: var(--bad); }
+.reaction-card.accent { border-left-color: var(--accent); }
+@keyframes reactionIn  { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes reactionOut { to   { opacity: 0; transform: translateY(-6px); } }
+@media (min-width: 721px) {
+  /* Desktop already has the .reaction-wrap row; suppress the floating overlay. */
+  .reaction-overlay { display: none; }
+}
+
+.cell-details {
+  position: absolute; left: 10px; right: 10px; bottom: 10px;
+  background: var(--panel); border: 1px solid var(--panel-high);
+  border-radius: var(--radius); padding: 8px 12px;
+  display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--shadow); z-index: 5;
+}
+.cell-details.hidden { display: none; }
+.cell-details.placeholder { opacity: 0.55; }
+.cell-details.placeholder .cd-title { color: var(--dim); font-weight: 400; }
+.cell-details .cd-title { font-size: 13px; font-weight: 600; color: var(--accent); padding-right: 32px; }
+.cell-details .cd-meta { font-size: 11px; color: var(--dim); font-family: var(--font-mono); padding-right: 32px; }
+.cell-details .cd-close {
+  position: absolute; right: 6px; top: 6px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: transparent; border: none; color: var(--dim);
+  font-size: 18px; line-height: 1; cursor: pointer;
+}
+.cell-details .cd-close:hover { color: var(--accent); background: var(--panel-high); }
+@media (min-width: 721px) {
+  .cell-details { display: none; }  /* desktop uses .selected-tile-desc instead */
+}
+
+/* ============================================================
+   v0.7 — Mobile bottom nav (Build / Research / Place / Menu)
+   ============================================================ */
+
+.mobile-nav { display: none; }  /* shown only at <=720px below */
+
+/* ============================================================
+   v0.7 — Bottom sheet primitive (used by Build, Place, Menu)
+   ============================================================ */
+
+.sheet-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15, 17, 22, 0.6);
+  z-index: 150;
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fadeIn 160ms ease-out;
+}
+.sheet {
+  background: var(--bg); border-top: 1px solid var(--panel-high);
+  border-radius: 14px 14px 0 0;
+  width: 100%; max-width: 720px;
+  max-height: 78vh; max-height: 78dvh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  animation: sheetUp 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--panel-high);
+}
+.sheet-title { font-size: 14px; font-weight: 600; color: var(--accent); flex: 1; }
+.sheet-close {
+  background: transparent; border: 1px solid var(--panel-high);
+  color: var(--text); border-radius: 50%;
+  width: 36px; height: 36px; font-size: 22px; line-height: 1; cursor: pointer;
+}
+.sheet-close:hover { background: var(--panel-high); color: var(--accent); }
+.sheet-body {
+  overflow-y: auto;
+  padding: 10px 14px 18px;
+  -webkit-overflow-scrolling: touch;
+}
+.sheet-body .tray-wrap {
+  display: block;  /* override mobile hiding when inside a sheet */
+  padding: 0; border: none; max-height: none;
+}
+.sheet-body .place-context { padding: 0; display: block; }
+.sheet-empty { color: var(--dim); font-size: 13px; padding: 10px; text-align: center; }
+
+.menu-sheet { display: flex; flex-direction: column; gap: 10px; }
+.menu-section-label {
+  font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px;
+  margin-top: 6px;
+}
+.menu-speed-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.menu-speed-btn {
+  background: var(--panel); border: 1px solid var(--panel-high); color: var(--text);
+  border-radius: 6px; padding: 12px; font-family: inherit; font-size: 13px;
+  min-height: 48px; cursor: pointer;
+}
+.menu-speed-btn.active { border-color: var(--accent); color: var(--accent); background: var(--panel-high); }
+.menu-actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.menu-action-btn {
+  background: var(--panel); border: 1px solid var(--panel-high); color: var(--text);
+  border-radius: 6px; padding: 14px; font-family: inherit; font-size: 13px;
+  min-height: 48px; cursor: pointer;
+}
+.menu-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+.menu-info { font-size: 11px; color: var(--dim); line-height: 1.4; }
 
 .tray-wrap {
   grid-row: 2; grid-column: 2;
@@ -586,95 +747,112 @@ button { font-family: inherit; cursor: pointer; }
    ============================================================ */
 
 @media (max-width: 720px) {
-  /* --- Game board: stack to single column --- */
-  .screen-game-board {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto auto auto;
-  }
+  /* --- v0.7 map-dominant layout: HUD / board / mobile-nav ---
+     Hidden rows (tray, selected-desc, reaction, place-context) use display:none
+     so they don't occupy grid rows. */
+  .screen-game-board,
   .screen-game-board.with-place {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto auto auto auto;
+    grid-template-rows: auto 1fr auto;
   }
 
-  /* --- HUD: wrap rows, shrink stats, touch-size buttons --- */
+  /* --- HUD: single horizontal pill-chip strip, scrollable --- */
   .hud {
     grid-column: 1;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 6px 8px;
     gap: 6px;
-    height: auto;
-    min-height: 48px;
+    height: 56px;
+    min-height: 56px;
+    scrollbar-width: none;
   }
+  .hud::-webkit-scrollbar { display: none; }
+  .hud > * { flex-shrink: 0; }
   .hud .state-name-block {
     min-width: 0;
-    flex-basis: 100%;
+    max-width: 120px;
+    overflow: hidden;
   }
-  .hud .state-name-block .state-name-line { font-size: 13px; }
+  .hud .state-name-block .state-name-line {
+    font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .hud .state-name-block .paper-line { display: none; }
   .stat {
     min-width: 0;
-    padding: 2px 4px;
+    background: var(--panel-high);
+    border-radius: 14px;
+    padding: 4px 10px;
+    min-height: 44px;
+    justify-content: center;
   }
   .stat .stat-label { font-size: 9px; }
-  .stat .stat-value { font-size: 15px; }
-  .hud .hints { display: none; }  /* keyboard shortcuts don't apply on touch */
-  .stat.clickable { min-height: 44px; justify-content: center; padding: 2px 8px; }
-  .speed-control { margin-left: 0; }
-  .speed-btn {
-    min-height: 44px;
-    min-width: 44px;
-    font-size: 14px;
-    padding: 6px 10px;
-  }
+  .stat .stat-value { font-size: 14px; }
+  .hud .hints { display: none; }
+  .hud .speed-control { display: none; }   /* v0.7: speed moves to the Menu sheet */
 
-  /* --- Board: fit available width, allow horizontal scroll when needed --- */
+  /* --- Board: dominant, scrollable, anchored container for overlays --- */
   .board-wrap {
     grid-row: 2; grid-column: 1;
-    padding: 8px;
-    gap: 8px;
+    padding: 6px 8px;
+    gap: 6px;
+    min-height: 0;            /* lets the 1fr row actually flex */
+    overflow: auto;
   }
-  .board {
-    max-width: 100%;
+  .board { max-width: 100%; gap: 0; }
+  /* v0.7: drop the inter-cell gap; inset shadow keeps cell boundaries readable. */
+  .cell { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22); }
+  /* Legend: single-row horizontal scroll on mobile so it stays compact. */
+  .legend {
+    font-size: 10px; gap: 10px;
+    padding: 2px 2px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
   }
-  .cell {
-    width: clamp(28px, calc((100vw - 18px) / var(--board-cols, 20)), 38px);
-    height: clamp(28px, calc((100vw - 18px) / var(--board-cols, 20)), 38px);
-  }
-  .legend { font-size: 10px; gap: 4px 10px; }
+  .legend::-webkit-scrollbar { display: none; }
+  .legend > * { flex-shrink: 0; }
   .legend-title { font-size: 9px; }
 
-  /* --- Tray: full-width, below the board, capped height with internal scroll --- */
-  .tray-wrap {
-    grid-row: 3; grid-column: 1;
-    padding: 8px 10px;
-    border-left: none;
-    border-top: 1px solid var(--bg-deep);
-    max-height: 32vh;
-  }
-  .tray { gap: 4px; }
-  .tray-tile {
-    grid-template-columns: 48px 1fr;
-    gap: 8px;
-    min-height: 44px;
-    padding: 6px 8px;
-  }
-  .tray-tile .tile-icon { width: 48px; height: 48px; }
-  .tray-tile .tile-name { font-size: 13px; }
+  /* --- v0.7 hide desktop-only chrome on mobile (now lives in nav + sheets + overlays) --- */
+  .tray-wrap         { display: none; }
+  .selected-tile-desc{ display: none; }
+  .reaction-wrap     { display: none; }
+  .place-context     { display: none; }
 
-  /* --- Selected-tile description and reaction: stack onto their own rows --- */
-  .selected-tile-desc {
-    grid-row: 4; grid-column: 1;
-    padding: 6px 12px;
+  /* --- Persistent bottom nav --- */
+  .mobile-nav {
+    grid-row: 3; grid-column: 1;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--panel);
+    border-top: 1px solid var(--bg-deep);
+    padding: 6px 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
+    gap: 6px;
   }
-  .reaction-wrap {
-    grid-row: 5; grid-column: 1;
-    border-left: none;
-    padding: 6px 12px;
-    min-height: 36px;
+  .mnav-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    background: var(--panel-high); border: 1px solid transparent; color: var(--text);
+    border-radius: 8px; padding: 8px 4px;
+    min-height: 56px;
+    font-family: inherit; cursor: pointer;
   }
-  .place-context {
-    grid-row: 6; grid-column: 1;
-    padding: 8px 12px;
+  .mnav-btn .mnav-icon { font-size: 18px; line-height: 1; color: var(--accent); }
+  .mnav-btn .mnav-label { font-size: 11px; color: var(--dim); }
+  .mnav-btn:hover { border-color: var(--panel-high); }
+  .mnav-btn.glow {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(71, 153, 229, 0.25);
+    animation: glowPulse 1.6s ease-in-out infinite;
+  }
+  .mnav-btn.glow .mnav-icon,
+  .mnav-btn.glow .mnav-label { color: var(--accent); }
+  .mnav-btn.disabled, .mnav-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(71, 153, 229, 0.25); }
+    50%      { box-shadow: 0 0 0 4px rgba(71, 153, 229, 0.40); }
   }
 
   /* --- Pick screens: auto-wrap to viewport width --- */
@@ -735,16 +913,15 @@ button { font-family: inherit; cursor: pointer; }
 @media (max-width: 480px) {
   .stat .stat-value { font-size: 13px; }
   .stat .stat-label { font-size: 8px; }
-  .speed-btn { padding: 4px 8px; font-size: 13px; }
+  .stat { padding: 3px 8px; }
   .title { font-size: 28px; letter-spacing: 1px; }
   .state-grid { grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); }
   .state-code { font-size: 14px; }
   .state-name { font-size: 10px; }
-  .tray-tile { grid-template-columns: 44px 1fr; }
-  .tray-tile .tile-icon { width: 44px; height: 44px; }
-  .tray-tile .tile-name { font-size: 12px; }
-  .cell {
-    width: clamp(24px, calc((100vw - 18px) / var(--board-cols, 20)), 32px);
-    height: clamp(24px, calc((100vw - 18px) / var(--board-cols, 20)), 32px);
-  }
+  /* Tile-tray rows live inside the build sheet on mobile; keep them touch-sized. */
+  .sheet-body .tray-tile { grid-template-columns: 44px 1fr; min-height: 44px; padding: 6px 8px; }
+  .sheet-body .tray-tile .tile-icon { width: 44px; height: 44px; }
+  .sheet-body .tray-tile .tile-name { font-size: 12px; }
+  .mnav-btn .mnav-icon { font-size: 16px; }
+  .mnav-btn .mnav-label { font-size: 10px; }
 }
