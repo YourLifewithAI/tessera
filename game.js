@@ -812,6 +812,9 @@
 
   // ----- Game board -----
   function renderGameBoard() {
+    const oldWrap = document.getElementById('board-wrap');
+    const savedSL = oldWrap ? oldWrap.scrollLeft : 0;
+    const savedST = oldWrap ? oldWrap.scrollTop : 0;
     clearApp();
     const screen = el('div', 'screen-game-board' + (state.placeData ? ' with-place' : ''));
     screen.id = 'screen-game-board';
@@ -826,6 +829,13 @@
     app.appendChild(screen);
     // Apply persisted zoom (or platform default).
     applyCellPx(getCurrentCellPx());
+    if (savedSL || savedST) {
+      const newWrap = document.getElementById('board-wrap');
+      if (newWrap) {
+        newWrap.scrollLeft = savedSL;
+        newWrap.scrollTop = savedST;
+      }
+    }
   }
 
   function buildHud() {
@@ -1004,13 +1014,25 @@
     return wrap;
   }
 
-  // v0.7: render only the inner board grid (cells), keeping the rest of board-wrap intact.
-  // Used after cell selection changes so we don't rebuild the world.
-  function renderBoard() {
-    const wrap = document.getElementById('board-wrap');
-    if (!wrap) return;
-    const fresh = buildBoard();
-    wrap.replaceWith(fresh);
+  // Surgical highlight update: toggle the .highlighted class + .cell-badge on the
+  // single affected cell. Avoids any board rebuild so the user's scroll position
+  // inside .board-wrap is preserved when they tap around the map.
+  function updateCellHighlight() {
+    const board = document.getElementById('board');
+    if (!board) return;
+    const prev = board.querySelector('.cell.highlighted');
+    if (prev) {
+      prev.classList.remove('highlighted');
+      const oldBadge = prev.querySelector('.cell-badge');
+      if (oldBadge) oldBadge.remove();
+    }
+    const hl = state.highlightedCellXY;
+    if (!hl) return;
+    const next = board.querySelector('.cell[data-x="' + hl.x + '"][data-y="' + hl.y + '"]');
+    if (next) {
+      next.classList.add('highlighted');
+      next.appendChild(el('div', 'cell-badge'));
+    }
   }
 
   function buildLegend() {
@@ -1040,14 +1062,16 @@
     } else {
       state.highlightedCellXY = { x, y };
     }
-    renderBoard();
+    updateCellHighlight();
+    renderCellDetails();
     renderMobileNav();
   }
 
   function clearCellSelection() {
     if (!state.highlightedCellXY) return;
     state.highlightedCellXY = null;
-    renderBoard();
+    updateCellHighlight();
+    renderCellDetails();
     renderMobileNav();
   }
 
