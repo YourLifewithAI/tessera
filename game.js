@@ -69,6 +69,13 @@
     // ----- v0.3 sponsor -----
     sponsorId: '',               // knockoff hyperscaler id (see data/sponsors.js)
     sponsor: null,               // resolved sponsor record (or null if state-only flow)
+    // ----- v0.4 research -----
+    research: {
+      completed: {},             // { researchId: true }
+      inProgressId: '',          // currently funded research, or '' if idle
+      ticksRemaining: 0,         // quarters left on in-progress research
+    },
+    researchPanelOpen: false,    // modal toggle
   };
 
   // ----- DOM root -----
@@ -81,6 +88,119 @@
   function key(x, y) { return x + ',' + y; }
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // ===== v0.4 research helpers =====
+  // getEffectiveTile(tileId) returns a clone of the tile def with all
+  // completed-research effects applied (capex/opex/revenue/goodwill/etc.).
+  // Called per placement and per tray render — keep it cheap.
+  function getEffectiveTile(tileId) {
+    const base = window.TILES && window.TILES[tileId];
+    if (!base) return null;
+    const def = Object.assign({}, base);
+    const completed = state.research && state.research.completed || {};
+    const RES = window.RESEARCH || {};
+    for (const rid of Object.keys(completed)) {
+      const r = RES[rid]; if (!r) continue;
+      for (const e of (r.effects || [])) {
+        if (e.type === 'tile_field_mult' && e.tileId === tileId) {
+          def[e.field] = (def[e.field] || 0) * e.factor;
+        } else if (e.type === 'tile_field_add' && e.tileId === tileId) {
+          def[e.field] = (def[e.field] || 0) + e.delta;
+        } else if (e.type === 'tile_goodwill_add' && e.tileId === tileId) {
+          def.baseGoodwill = (def.baseGoodwill || 0) + e.delta;
+        } else if (e.type === 'layer_field_mult' && e.layer === base.layer) {
+          def[e.field] = (def[e.field] || 0) * e.factor;
+        } else if (e.type === 'global_capex_mult') {
+          def.capex = (def.capex || 0) * e.factor;
+        } else if (e.type === 'global_goodwill_floor_add') {
+          if ((def.baseGoodwill || 0) < 0) {
+            def.baseGoodwill = Math.min(0, (def.baseGoodwill || 0) + e.delta);
+          }
+        }
+      }
+    }
+    // Tidy floats so $4000 * 0.85 = $3400 (not 3399.9999...).
+    if (def.capex != null) def.capex = Math.round(def.capex);
+    if (def.opex != null) def.opex = Math.round(def.opex * 10) / 10;
+    if (def.revenue != null) def.revenue = Math.round(def.revenue * 10) / 10;
+    if (def.waterDrawPerTick != null) def.waterDrawPerTick = Math.round(def.waterDrawPerTick * 10) / 10;
+    if (def.emissionsPerTick != null) def.emissionsPerTick = Math.round(def.emissionsPerTick * 10) / 10;
+    if (def.baseGoodwill != null) def.baseGoodwill = Math.round(def.baseGoodwill);
+    return def;
+  }
+
+  // isTileUnlocked(tileId) — true if the tile has no unlock requirement
+  // or the requirement has been researched.
+  function isTileUnlocked(tileId) {
+    const base = window.TILES && window.TILES[tileId];
+    if (!base || !base.unlockedBy) return true;
+    return !!(state.research && state.research.completed && state.research.completed[base.unlockedBy]);
+  }
+
+  // Concern/need scoring multipliers from completed research.
+  function concernSoftenerFactor(tileId, issue) {
+    let factor = 1;
+    const completed = state.research && state.research.completed || {};
+    const RES = window.RESEARCH || {};
+    const needle = (issue || '').toLowerCase();
+    for (const rid of Object.keys(completed)) {
+      const r = RES[rid]; if (!r) continue;
+      for (const e of (r.effects || [])) {
+        if (e.type !== 'concern_softener' || e.tileId !== tileId) continue;
+        if (!e.issueMatch || needle.indexOf(e.issueMatch.toLowerCase()) !== -1) {
+          factor *= e.factor;
+        }
+      }
+    }
+    return factor;
+  }
+  function needAmplifierFactor(tileId, issue) {
+    let factor = 1;
+    const completed = state.research && state.research.completed || {};
+    const RES = window.RESEARCH || {};
+    const needle = (issue || '').toLowerCase();
+    for (const rid of Object.keys(completed)) {
+      const r = RES[rid]; if (!r) continue;
+      for (const e of (r.effects || [])) {
+        if (e.type !== 'need_amplifier' || e.tileId !== tileId) continue;
+        if (!e.issueMatch || needle.indexOf(e.issueMatch.toLowerCase()) !== -1) {
+          factor *= e.factor;
+        }
+      }
+    }
+    return factor;
+  }
+
+  // Research lifecycle.
+  function researchStatus(rid) {
+    if (state.research.completed[rid]) return 'completed';
+    if (state.research.inProgressId === rid) return 'in_progress';
+    const r = window.RESEARCH[rid];
+    if (!r) return 'locked';
+    for (const p of (r.prereqs || [])) {
+      if (!state.research.completed[p]) return 'locked';
+    }
+    return 'available';
+  }
+  function canAffordResearch(rid) {
+    const r = window.RESEARCH[rid]; if (!r) return false;
+    return state.dollars >= (r.costM || 0);
+  }
+  function startResearch(rid) {
+    const r = window.RESEARCH[rid]; if (!r) return;
+    if (researchStatus(rid) !== 'available') return;
+    if (!canAffordResearch(rid)) return;
+    // If something else is in progress, refuse — one at a time.
+    if (state.research.inProgressId) return;
+    state.dollars -= (r.costM || 0);
+    state.research.inProgressId = rid;
+    state.research.ticksRemaining = r.durationQuarters || 1;
+  }
+  function cancelResearch() {
+    // No refund — funding sunk into the program.
+    state.research.inProgressId = '';
+    state.research.ticksRemaining = 0;
+  }
 
   function squaredDistance(ax, ay, bx, by) {
     const dx = ax - bx, dy = ay - by;
@@ -117,6 +237,14 @@
     state.sponsor = (sponsorId && window.SPONSORS) ? (window.SPONSORS[sponsorId] || null) : null;
     state.dollars = state.sponsor ? state.sponsor.startingBudgetM : 25000;  // $25B fallback
     state.goodwill = 50 + (state.sponsor ? (state.sponsor.startingGoodwill || 0) : 0);
+    // Research: sponsor's starting nodes are pre-completed.
+    state.research = { completed: {}, inProgressId: '', ticksRemaining: 0 };
+    if (state.sponsor && Array.isArray(state.sponsor.startingResearch)) {
+      for (const rid of state.sponsor.startingResearch) {
+        if (window.RESEARCH && window.RESEARCH[rid]) state.research.completed[rid] = true;
+      }
+    }
+    state.researchPanelOpen = false;
     state.power = 0; state.compute = 0; state.water = 0; state.food = 0;
     state.population = 0;
     state.tesseraeComplete = 0;
@@ -211,7 +339,7 @@
       return;
     }
     const tileId = state.selectedTileId;
-    const def = window.TILES[tileId];
+    const def = getEffectiveTile(tileId);
     const capex = def.capex ?? def.cost ?? 0;
     if (state.dollars < capex) {
       setReaction(`Not enough budget — ${def.name} costs ${formatDollars(capex)}.`, 'bad');
@@ -277,6 +405,18 @@
   function tick() {
     if (state.screen !== 'GAME_BOARD') return;
     state.tickCount++;
+    // Research progress.
+    if (state.research.inProgressId && state.research.ticksRemaining > 0) {
+      state.research.ticksRemaining -= 1;
+      if (state.research.ticksRemaining <= 0) {
+        const rid = state.research.inProgressId;
+        const r = window.RESEARCH[rid];
+        state.research.completed[rid] = true;
+        state.research.inProgressId = '';
+        state.research.ticksRemaining = 0;
+        if (r) setReaction(`Research complete: ${r.name}.`, 'ok');
+      }
+    }
     let dp = 0, dc = 0, dw = 0, df = 0, housingCount = 0;
     let opex = 0, baseRevenue = 0, boostedRevenue = 0;
     let jobsOps = 0, emissions = 0, waterDraw = 0;
@@ -290,7 +430,7 @@
       }
     }
     for (const k of Object.keys(state.placed)) {
-      const def = window.TILES[state.placed[k]];
+      const def = getEffectiveTile(state.placed[k]);
       if (!def) continue;
       dp += def.power || 0;
       dc += def.compute || 0;
@@ -651,6 +791,19 @@
     hud.appendChild(stat('Emissions', state.cumulativeEmissions, emTone, `Cumulative kt CO2e since groundbreaking. State cap: ${emCap} kt/yr; current rate: ${Math.round(emRate)} kt/yr.`));
     hud.appendChild(stat('Year',     `${year} · Q${quarter}`, 'accent', `1 tick = 1 quarter. ${TICKS_PER_YEAR} ticks/year.`));
     hud.appendChild(stat('Tesserae', state.tesseraeComplete, 'accent',  'Completed Tesserae this session.'));
+    // Research stat — clickable; opens the research panel.
+    const inProg = state.research.inProgressId ? window.RESEARCH[state.research.inProgressId] : null;
+    const researchLabel = inProg
+      ? `${inProg.name.length > 24 ? inProg.name.slice(0, 22) + '…' : inProg.name} · ${state.research.ticksRemaining}q`
+      : `${Object.keys(state.research.completed).length} done · open ▸`;
+    const researchTone = inProg ? 'accent' : null;
+    const researchTip = inProg
+      ? `Researching: ${inProg.name}. ${state.research.ticksRemaining} quarter(s) remaining. Click to open the research panel.`
+      : 'Click to open the research panel and pick a tech node.';
+    const researchStat = stat('Research', researchLabel, researchTone, researchTip);
+    researchStat.classList.add('clickable');
+    researchStat.addEventListener('click', openResearchPanel);
+    hud.appendChild(researchStat);
     const hints = el('div', 'hints');
     hints.innerHTML = '<div>R: restart · B: back · Esc/RClick: deselect</div>'
                     + `<div>Tick every ${TICK_MS / 1000}s (= 1 quarter). Place tiles to grow.</div>`;
@@ -754,7 +907,8 @@
     wrap.appendChild(el('div', 'tray-label', 'TILE TRAY  ·  click to select, click board to place'));
     const tray = el('div', 'tray');
     for (const id of Object.keys(window.TILES)) {
-      const def = window.TILES[id];
+      if (!isTileUnlocked(id)) continue;     // gated by research
+      const def = getEffectiveTile(id);
       const sKey = def.sentimentKey || '';
       let modifier = 1.0;
       if (sKey && state.selectedStateCode && window.STATES[state.selectedStateCode][sKey] != null) {
@@ -923,14 +1077,14 @@
       const reasons = [];
       for (const n of (c.expressedNeeds || [])) {
         if (n.addressedBy && n.addressedBy.indexOf(tileId) !== -1) {
-          const bump = (pri[n.priority] || 1);
+          const bump = (pri[n.priority] || 1) * needAmplifierFactor(tileId, n.issue);
           cityDelta += bump;
           reasons.push(`addresses ${n.issue}`);
         }
       }
       for (const k of (c.expressedConcerns || [])) {
         if (k.triggeredBy && k.triggeredBy.indexOf(tileId) !== -1) {
-          const drag = (pri[k.priority] || 1);
+          const drag = (pri[k.priority] || 1) * concernSoftenerFactor(tileId, k.issue);
           cityDelta -= drag;
           reasons.push(`triggers ${k.issue}`);
         }
@@ -942,6 +1096,194 @@
       }
     }
     return out;
+  }
+
+  // ----- Research panel (v0.4) -----
+  function openResearchPanel() {
+    state.researchPanelOpen = true;
+    renderResearchPanel();
+  }
+  function closeResearchPanel() {
+    state.researchPanelOpen = false;
+    const old = document.getElementById('research-overlay');
+    if (old) old.remove();
+  }
+  function renderResearchPanel() {
+    const existing = document.getElementById('research-overlay');
+    if (existing) existing.remove();
+    const RES = window.RESEARCH || {};
+    const G = window.RESEARCH_GRID || { cols: 3, rows: 6, cardWidth: 220, cardHeight: 96, colGap: 32, rowGap: 28, paddingX: 24, paddingY: 24 };
+    const innerW = G.cols * G.cardWidth + (G.cols - 1) * G.colGap + 2 * G.paddingX;
+    const innerH = G.rows * G.cardHeight + (G.rows - 1) * G.rowGap + 2 * G.paddingY;
+
+    const overlay = el('div', 'research-overlay');
+    overlay.id = 'research-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeResearchPanel(); });
+
+    const panel = el('div', 'research-panel');
+    const header = el('div', 'research-header');
+    header.appendChild(el('h2', 'research-title', 'RESEARCH'));
+    const sub = el('div', 'research-sub');
+    sub.textContent = `Budget ${formatDollars(state.dollars)} · ${Object.keys(state.research.completed).length} of ${Object.keys(RES).length} researched`;
+    header.appendChild(sub);
+    const closeBtn = el('button', 'research-close', '×');
+    closeBtn.addEventListener('click', closeResearchPanel);
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+
+    // In-progress banner.
+    const inProg = state.research.inProgressId ? RES[state.research.inProgressId] : null;
+    if (inProg) {
+      const banner = el('div', 'research-inprogress');
+      const total = inProg.durationQuarters || 1;
+      const done = total - state.research.ticksRemaining;
+      const pct = Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+      banner.innerHTML = `<div class="rip-title">In progress: <b>${inProg.name}</b> · ${state.research.ticksRemaining} of ${total} quarters left</div>` +
+        `<div class="rip-bar"><div class="rip-fill" style="width:${pct}%"></div></div>`;
+      const cancel = el('button', 'rip-cancel', 'Cancel (no refund)');
+      cancel.addEventListener('click', () => { cancelResearch(); renderResearchPanel(); renderHud(); });
+      banner.appendChild(cancel);
+      panel.appendChild(banner);
+    } else {
+      const banner = el('div', 'research-idle', 'No research in progress. Pick an available node.');
+      panel.appendChild(banner);
+    }
+
+    // The graph: SVG edges layer + absolutely-positioned node cards.
+    const board = el('div', 'research-board');
+    board.style.width = innerW + 'px';
+    board.style.height = innerH + 'px';
+
+    // SVG edges.
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', 'research-edges');
+    svg.setAttribute('width', innerW);
+    svg.setAttribute('height', innerH);
+    // Arrowhead marker.
+    const defs = document.createElementNS(svgNS, 'defs');
+    const marker = document.createElementNS(svgNS, 'marker');
+    marker.setAttribute('id', 'rsh-arrow');
+    marker.setAttribute('viewBox', '0 0 10 10');
+    marker.setAttribute('refX', '8'); marker.setAttribute('refY', '5');
+    marker.setAttribute('markerWidth', '6'); marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('orient', 'auto-start-reverse');
+    const arrow = document.createElementNS(svgNS, 'path');
+    arrow.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+    arrow.setAttribute('class', 'rsh-arrowhead');
+    marker.appendChild(arrow);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    function cardCenter(col, row) {
+      return {
+        x: G.paddingX + col * (G.cardWidth + G.colGap) + G.cardWidth / 2,
+        y: G.paddingY + row * (G.cardHeight + G.rowGap) + G.cardHeight / 2,
+      };
+    }
+    function cardRight(col, row) {
+      const c = cardCenter(col, row);
+      return { x: c.x + G.cardWidth / 2, y: c.y };
+    }
+    function cardLeft(col, row) {
+      const c = cardCenter(col, row);
+      return { x: c.x - G.cardWidth / 2, y: c.y };
+    }
+    for (const rid of Object.keys(RES)) {
+      const r = RES[rid];
+      for (const pid of (r.prereqs || [])) {
+        const p = RES[pid]; if (!p) continue;
+        const a = cardRight(p.col, p.row);
+        const b = cardLeft(r.col, r.row);
+        const line = document.createElementNS(svgNS, 'line');
+        line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+        line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+        const status = researchStatus(rid);
+        line.setAttribute('class', 'research-edge ' + status);
+        line.setAttribute('marker-end', 'url(#rsh-arrow)');
+        svg.appendChild(line);
+      }
+    }
+    board.appendChild(svg);
+
+    // Nodes.
+    for (const rid of Object.keys(RES)) {
+      const r = RES[rid];
+      const status = researchStatus(rid);
+      const affordable = canAffordResearch(rid);
+      const blockedByOther = !!state.research.inProgressId && status === 'available';
+      const card = el('button', 'research-node ' + status + (blockedByOther ? ' blocked' : '') + (status === 'available' && !affordable ? ' broke' : ''));
+      card.style.left = (G.paddingX + r.col * (G.cardWidth + G.colGap)) + 'px';
+      card.style.top  = (G.paddingY + r.row * (G.cardHeight + G.rowGap)) + 'px';
+      card.style.width = G.cardWidth + 'px';
+      card.style.height = G.cardHeight + 'px';
+
+      const head = el('div', 'rn-head');
+      head.appendChild(el('span', 'rn-cat', r.category));
+      head.appendChild(el('span', 'rn-status', statusLabel(status)));
+      card.appendChild(head);
+      card.appendChild(el('div', 'rn-name', r.name));
+      const meta = el('div', 'rn-meta');
+      meta.textContent = `${formatDollars(r.costM)} · ${r.durationQuarters}q`;
+      if (r.prereqs && r.prereqs.length) {
+        const names = r.prereqs.map(p => RES[p] ? RES[p].name : p);
+        meta.textContent += ` · req: ${names.join(', ')}`;
+      }
+      card.appendChild(meta);
+
+      // Tooltip with description + effects + real-world note.
+      const tip = [r.description];
+      if (r.effects && r.effects.length) tip.push('Effects:');
+      for (const e of (r.effects || [])) tip.push('  · ' + describeEffect(e));
+      // List unlocked tiles.
+      for (const tid of Object.keys(window.TILES || {})) {
+        if (window.TILES[tid].unlockedBy === rid) tip.push(`  · unlocks tile: ${window.TILES[tid].name}`);
+      }
+      if (r.realWorld) tip.push('Real world: ' + r.realWorld);
+      card.title = tip.join('\n');
+
+      card.addEventListener('click', () => {
+        if (status === 'available' && affordable && !blockedByOther) {
+          startResearch(rid);
+          renderResearchPanel();
+          renderHud();
+        } else if (status === 'in_progress') {
+          // No-op; cancel is on the banner.
+        }
+      });
+      board.appendChild(card);
+    }
+
+    panel.appendChild(board);
+
+    // Legend.
+    const legend = el('div', 'research-legend');
+    legend.innerHTML = '<span class="rl available">available</span>' +
+                       '<span class="rl in_progress">in progress</span>' +
+                       '<span class="rl completed">researched</span>' +
+                       '<span class="rl locked">locked</span>' +
+                       '<span class="rl-note">One research at a time. Costs deduct on start. No refund on cancel.</span>';
+    panel.appendChild(legend);
+
+    overlay.appendChild(panel);
+    app.appendChild(overlay);
+  }
+  function statusLabel(s) {
+    if (s === 'completed') return '✓';
+    if (s === 'in_progress') return '⏳';
+    if (s === 'locked') return '🔒';
+    return '+';
+  }
+  function describeEffect(e) {
+    if (e.type === 'tile_field_mult') return `${e.tileId} ${e.field} ×${e.factor}`;
+    if (e.type === 'tile_field_add') return `${e.tileId} ${e.field} ${signed(e.delta)}`;
+    if (e.type === 'tile_goodwill_add') return `${e.tileId} baseGoodwill ${signed(e.delta)}`;
+    if (e.type === 'layer_field_mult') return `${e.layer} layer ${e.field} ×${e.factor}`;
+    if (e.type === 'global_capex_mult') return `all tiles capex ×${e.factor}`;
+    if (e.type === 'global_goodwill_floor_add') return `all negative baseGoodwill +${e.delta} (toward 0)`;
+    if (e.type === 'concern_softener') return `softens ${e.tileId} concerns matching "${e.issueMatch || '(all)'}" ×${e.factor}`;
+    if (e.type === 'need_amplifier') return `amplifies ${e.tileId} need-fit matching "${e.issueMatch || '(all)'}" ×${e.factor}`;
+    return e.type;
   }
 
   // ----- Win overlay -----

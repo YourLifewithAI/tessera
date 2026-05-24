@@ -181,6 +181,75 @@ window.TILES = {
     power: -3, water: 0, compute: -5, food: 0,
     description: "Runs Climate, Flow, Provision, Harmony, Growth, Memory. Required to complete a Tessera.",
   },
+
+  // ----- v0.4 research-unlocked tiles -----
+  // These do not appear in the tray until the listed research is complete.
+  // Art reuses the closest existing SVG until proper art lands.
+
+  geothermal: {
+    name: "Geothermal Loop",
+    subtitle: "Closed-loop deep geothermal baseload",
+    layer: "Power",
+    capex: 600,                          // $600M (midway between solar and SMR)
+    opex: 5, revenue: 12,                // net +$28M/yr; quiet baseload
+    jobsConstruction: 200, jobsOps: 30,
+    emissionsPerTick: -3, waterDrawPerTick: 0,
+    baseGoodwill: 6,
+    sentimentKey: "enviro",
+    color: "#A0522D",
+    art: "tiles/solar.svg",              // placeholder
+    power: 30, water: 0, compute: 0, food: 0,
+    unlockedBy: "geothermal",
+    description: "Quiet, popular baseload. Drilling-cost dependent. Stacks with SMR, doesn't replace it.",
+  },
+  algae_bioreactor: {
+    name: "Algae Bioreactor",
+    subtitle: "Net-negative emissions, net-positive water",
+    layer: "Closed Loops",
+    capex: 150,
+    opex: 4, revenue: 6,
+    jobsConstruction: 60, jobsOps: 15,
+    emissionsPerTick: -4, waterDrawPerTick: -5,
+    baseGoodwill: 8,
+    sentimentKey: "enviro",
+    color: "#52B788",
+    art: "tiles/farm.svg",               // placeholder
+    power: -3, water: 12, compute: 0, food: 0,
+    unlockedBy: "algae_carbon_loop",
+    description: "Carbon sequestration plus biomass byproducts. Pairs with vertical farm.",
+  },
+  humanoid_pilot: {
+    name: "Humanoid Pilot Line",
+    subtitle: "First-gen humanoid assembly",
+    layer: "Robotics",
+    capex: 1200,
+    opex: 30, revenue: 80,
+    jobsConstruction: 300, jobsOps: 150,
+    emissionsPerTick: 1, waterDrawPerTick: 0,
+    baseGoodwill: -8,
+    sentimentKey: "data_center",
+    color: "#3B3F5C",
+    art: "tiles/robotics.svg",           // placeholder
+    power: -15, water: 0, compute: -10, food: 0,
+    unlockedBy: "humanoid_pilot",
+    description: "High revenue; loud displacement concerns. The Arcology-era preview.",
+  },
+  federated_training: {
+    name: "Federated Training Cluster",
+    subtitle: "Privacy-preserving distributed training",
+    layer: "Coordination",
+    capex: 600,
+    opex: 8, revenue: 0,
+    jobsConstruction: 80, jobsOps: 35,
+    emissionsPerTick: 0, waterDrawPerTick: 0,
+    baseGoodwill: 2,
+    sentimentKey: "fed_trust",
+    color: "#D4A24C",
+    art: "tiles/coordination.svg",       // placeholder
+    power: -4, water: 0, compute: 8, food: 0,
+    unlockedBy: "federated_training",
+    description: "Coordination amplifier with extra weight in TFP. Stacks with Coordination Node.",
+  },
 };
 
 // ---------------------------------------------------------------

@@ -29,6 +29,7 @@ window.SPONSORS = {
     knockoffOf: "AWS",
     startingBudgetM: 110000,        // $110B
     startingGoodwill: 0,
+    startingResearch: ["closed_loop_cooling"],
     flavor: "The cloud everyone already runs on. Big checkbook, big footprint.",
     focus: ["datacenter", "robotics"],
     paper: "MWS All-Hands Memo",
@@ -40,6 +41,7 @@ window.SPONSORS = {
     knockoffOf: "Microsoft Azure",
     startingBudgetM: 90000,         // $90B
     startingGoodwill: -5,           // Loudoun-style moratorium hangover
+    startingResearch: ["modular_smr"],
     flavor: "Enterprise to the bone. SMR-curious. Walking back a year of negative water-use coverage.",
     focus: ["smr", "datacenter"],
     paper: "Azurr Quarterly Brief",
@@ -51,6 +53,7 @@ window.SPONSORS = {
     knockoffOf: "Google Cloud",
     startingBudgetM: 80000,         // $80B
     startingGoodwill: +2,           // research-and-civic brand halo
+    startingResearch: ["chips_apprenticeship"],
     flavor: "Research-forward. Spends on civic projects. Slightly slower to ship.",
     focus: ["fab", "civic"],
     paper: "Moogle Research Blog",
@@ -62,6 +65,7 @@ window.SPONSORS = {
     knockoffOf: "Meta",
     startingBudgetM: 65000,         // $65B
     startingGoodwill: -5,           // social-trust crisis residue
+    startingResearch: ["pilot_template"],
     flavor: "Pivoted from social to ambient compute. Strong in housing, robotics, coordination.",
     focus: ["housing", "robotics", "coordination"],
     paper: "Beta Newsroom",
@@ -73,6 +77,7 @@ window.SPONSORS = {
     knockoffOf: "xAI / OpenAI",
     startingBudgetM: 40000,         // $40B
     startingGoodwill: -10,          // move-fast reputation, public spats
+    startingResearch: ["closed_loop_cooling"],
     flavor: "Move fast, break neighborhoods. Aggressive compute buildout, allergic to community input.",
     focus: ["datacenter", "smr"],
     paper: "xAGI Press Release",
@@ -84,6 +89,7 @@ window.SPONSORS = {
     knockoffOf: "Oracle",
     startingBudgetM: 35000,         // $35B
     startingGoodwill: 0,
+    startingResearch: ["process_water_recycling"],
     flavor: "Scrappy by hyperscaler standards. Database roots, fab-friendly, sharp elbows.",
     focus: ["fab", "datacenter"],
     paper: "Hortacle Investor Update",

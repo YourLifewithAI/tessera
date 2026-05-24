@@ -13,7 +13,8 @@ The whole project is vanilla HTML, CSS, and JavaScript. No framework. No build s
 | `game.js` | The whole game: state object, render functions per screen, event handlers, tick loop. |
 | `data/tiles.js` | The nine tile definitions and headline templates. Pure data — mod freely. |
 | `data/states.js` | The 50 state sentiment profiles. Pure data — mod freely. |
-| `data/sponsors.js` | Knockoff hyperscaler sponsors — starting budget, goodwill modifier, paper of record. |
+| `data/sponsors.js` | Knockoff hyperscaler sponsors — starting budget, goodwill modifier, paper of record, starting research nodes. |
+| `data/research.js` | The 15-node tech tree (`window.RESEARCH`) plus the grid layout config used by the visual graph. |
 | `data/tessera-data.js` | Place-data adapter scaffold. Defines `window.TesseraData` and the default registry adapter. |
 | `data/places/*.js` | One file per "place" (county + cities). Each registers itself on `window.TesseraPlaces`. |
 | `tiles/*.svg` | One SVG per tile. Replace any file with your own art; the game picks it up automatically. |
@@ -119,6 +120,34 @@ my_sponsor: {
 ```
 
 The sponsor-select screen sorts sponsors by budget descending and renders the whole registry. No game-code changes needed. Per-tile capex modifiers per sponsor are a planned v0.4 hook — for now, sponsor differences are budget + starting goodwill + flavor.
+
+### Add or edit a research node
+
+Open `data/research.js`. Each entry on `window.RESEARCH` is one node:
+
+```js
+my_node: {
+  id: "my_node",
+  name: "Short Title",
+  category: "Water",            // shown in the node header
+  description: "What it does, in one sentence.",
+  costM: 250,                    // millions of dollars (deducted on start)
+  durationQuarters: 4,           // ticks to complete
+  prereqs: ["other_node_id"],    // ids that must be completed first
+  col: 1, row: 2,                // grid coords for the visual graph (col 0-2, row 0-5)
+  effects: [
+    { type: "tile_field_mult", tileId: "datacenter", field: "waterDrawPerTick", factor: 0.5 },
+    { type: "concern_softener", tileId: "datacenter", issueMatch: "water", factor: 0.5 },
+  ],
+  realWorld: "Reference for where the analog is real.",
+},
+```
+
+Effect types (see `data/research.js` header for the full reference): `tile_field_mult` / `tile_field_add` / `tile_goodwill_add` / `layer_field_mult` / `global_capex_mult` / `global_goodwill_floor_add` / `concern_softener` / `need_amplifier`. `issueMatch` is a substring matched case-insensitively against the city's expressed-need or expressed-concern issue string.
+
+To **unlock a new tile** instead of modifying an existing one: add the tile to `data/tiles.js` with `unlockedBy: "my_node"` and leave the node's `effects` empty (the tile-unlock is gated by the tile def, not by an effect).
+
+To make a node **pre-completed for a sponsor**, add its id to that sponsor's `startingResearch` array in `data/sponsors.js`.
 
 ### Add a new place (the "local subscription" pattern)
 

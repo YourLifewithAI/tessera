@@ -145,6 +145,39 @@ Each `UpdateRecord` carries `date` (YYYY-MM), `scope` (`"county"` or `"city:<id>
 
 ---
 
+## Research tree (v0.4)
+
+A 15-node tech tree sits behind a button in the HUD. The thesis stays: **the hard part is the community.** Most research nodes are levers on community-friction (softening specific concerns, amplifying specific needs); a few tune economics; four unlock new tile types.
+
+### Mechanics
+
+- **One research at a time.** Picking a node deducts its `costM` from the sponsor budget immediately and starts a per-quarter timer. Cancel before completion = no refund.
+- **Prereqs are explicit.** Each node lists `prereqs: [id, ...]`. Locked nodes cannot be started; completing a prereq unlocks downstream nodes.
+- **Sponsor starting research.** Each sponsor begins with 1 node already completed reflecting their bias (MWS / xAGI start with `closed_loop_cooling`; Mikrohard with `modular_smr`; Moogle with `chips_apprenticeship`; Beta with `pilot_template`; Hortacle with `process_water_recycling`).
+- **Effects apply live.** `tile_field_mult` / `_add` modify capex, opex, revenue, emissions, water draw for placements *and* the tray display. `concern_softener` / `need_amplifier` scale priority weights in the city needs/concerns scoring rule (e.g., "Closed-Loop DC Cooling" multiplies Caldwell's water-draw concern by 0.5 specifically for datacenters). `tile_goodwill_add` shifts baseGoodwill (positive values soften the malus). `global_capex_mult` and `layer_field_mult` scope globally or to a layer.
+- **Tile unlocks** live as `unlockedBy: "<research_id>"` on the tile def. The tray hides the tile until research completes. Four ship: Geothermal Loop (Power), Algae Bioreactor (Closed Loops), Humanoid Pilot Line (Robotics), Federated Training Cluster (Coordination).
+
+### The 15-node tree
+
+| Category | Nodes |
+|---|---|
+| **Power** | Modular SMR Standard Design → SMR Community-Benefits Standard · Enhanced Geothermal Pilot *(unlocks Geothermal Loop)* |
+| **Water** | Closed-Loop DC Cooling Retrofit → Liquid-Cooled Compute Modules · Fab Process-Water Recycling → Algae Bioreactor Loop *(unlocks Algae Bioreactor)* |
+| **Workforce** | CHIPS Apprenticeship Pipeline · Robotics Trade-School Partnership → Humanoid Production Pilot *(unlocks Humanoid Pilot Line)* |
+| **Community** | PILOT Agreement Template → Community Benefits Agreement Playbook → PACE Clean-Energy Financing |
+| **Efficiency** | Modular Construction Pipeline · *(also under Community)* CBA Playbook → Federated AI Training Cluster *(unlocks Federated Training Cluster)* |
+
+Costs range $80M–$500M, durations 2–6 quarters. Each node carries a `realWorld` field naming the analog that inspired it (NuScale VOYGR, TSMC AZ water recycling, Maricopa-TSMC apprenticeship pact, Fervo Cape Station, etc.).
+
+### What this does NOT do yet
+
+- No research-cost discounts per sponsor focus (the chosen "starting research" path was kept simple).
+- No mid-game node insertion or branching by place — every place sees the same tree.
+- No save/load. Pre-completed nodes are recomputed from the sponsor each `startGame`.
+- New-tile art is placeholder (reuses the closest existing SVG). v0.5: real art.
+
+---
+
 ## Economic substrate (v0.3 — dollars)
 
 The economic layer sits beneath the social-license game. The thesis remains: **the hard part is the community.** Economics makes lived experience and regional spillover legible — it is not the new win condition.

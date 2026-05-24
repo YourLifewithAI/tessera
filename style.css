@@ -430,6 +430,109 @@ button { font-family: inherit; cursor: pointer; }
 .pc-history-row .pc-reason { color: var(--dim); }
 
 /* ============================================================
+   Research panel (v0.4 — visual tech graph)
+   ============================================================ */
+
+.hud .stat.clickable { cursor: pointer; }
+.hud .stat.clickable:hover { background: var(--panel-high); border-radius: 4px; }
+
+.research-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15, 17, 22, 0.82);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+  animation: fadeIn 200ms ease-out;
+  padding: 24px;
+  overflow: auto;
+}
+.research-panel {
+  background: var(--bg); border: 1px solid var(--panel-high); border-radius: var(--radius);
+  padding: 20px 24px; max-width: 920px; width: 100%;
+  display: flex; flex-direction: column; gap: 14px;
+  max-height: calc(100vh - 48px);
+}
+.research-header { display: flex; align-items: baseline; gap: 16px; }
+.research-title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 2px; color: var(--accent); }
+.research-sub { color: var(--dim); font-family: var(--font-mono); font-size: 12px; }
+.research-close {
+  margin-left: auto; background: transparent; border: 1px solid var(--panel-high); border-radius: 4px;
+  color: var(--text); cursor: pointer; width: 32px; height: 32px; font-size: 18px; line-height: 1;
+}
+.research-close:hover { background: var(--panel-high); color: var(--accent); }
+
+.research-inprogress {
+  background: var(--panel); border-left: 3px solid var(--accent); border-radius: 4px;
+  padding: 10px 14px; display: flex; flex-direction: column; gap: 6px;
+}
+.research-inprogress .rip-title { font-size: 13px; }
+.research-inprogress .rip-bar { background: var(--panel-high); border-radius: 4px; height: 6px; overflow: hidden; }
+.research-inprogress .rip-fill { background: var(--accent); height: 100%; transition: width 200ms; }
+.research-inprogress .rip-cancel {
+  align-self: flex-start; background: transparent; border: 1px solid var(--bad);
+  color: var(--bad); border-radius: 4px; padding: 4px 10px; cursor: pointer;
+  font-family: inherit; font-size: 11px;
+}
+.research-inprogress .rip-cancel:hover { background: var(--bad); color: var(--bg); }
+.research-idle {
+  background: var(--panel); border-radius: 4px; padding: 10px 14px;
+  color: var(--dim); font-size: 13px;
+}
+
+.research-board {
+  position: relative; margin: 0 auto;
+  overflow: auto;
+  background: var(--panel);
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+.research-edges {
+  position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0;
+}
+.research-edge { stroke-width: 1.5; opacity: 0.6; }
+.research-edge.completed   { stroke: var(--ok); opacity: 0.9; }
+.research-edge.in_progress { stroke: var(--accent); }
+.research-edge.available   { stroke: var(--dim); }
+.research-edge.locked      { stroke: var(--panel-high); }
+.rsh-arrowhead { fill: currentColor; }
+.research-edges line.completed   ~ defs marker path,
+.research-edges line.completed   + use { color: var(--ok); }
+
+.research-node {
+  position: absolute; z-index: 1;
+  background: var(--panel-high); border: 1px solid transparent; border-radius: 6px;
+  color: var(--text); cursor: pointer; font-family: inherit; text-align: left;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 4px;
+  transition: transform 100ms;
+}
+.research-node:hover { transform: translateY(-1px); }
+.research-node .rn-head { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+.research-node .rn-cat { color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.research-node .rn-status { margin-left: auto; font-size: 12px; }
+.research-node .rn-name { font-size: 12px; font-weight: 600; line-height: 1.2; }
+.research-node .rn-meta { font-size: 10px; color: var(--dim); font-family: var(--font-mono); line-height: 1.3; }
+
+.research-node.completed   { border-color: var(--ok); }
+.research-node.completed .rn-name { color: var(--ok); }
+.research-node.in_progress { border-color: var(--accent); background: var(--panel); }
+.research-node.in_progress .rn-name { color: var(--accent); }
+.research-node.available   { border-color: var(--panel-high); }
+.research-node.available:hover { border-color: var(--accent); }
+.research-node.available.broke   { opacity: 0.55; cursor: not-allowed; }
+.research-node.available.blocked { opacity: 0.55; cursor: not-allowed; }
+.research-node.locked      { opacity: 0.4; cursor: not-allowed; }
+.research-node.locked .rn-status { color: var(--dim); }
+
+.research-legend {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--dim);
+}
+.research-legend .rl { padding: 2px 8px; border-radius: 3px; border: 1px solid var(--panel-high); }
+.research-legend .rl.available   { border-color: var(--dim); }
+.research-legend .rl.in_progress { border-color: var(--accent); color: var(--accent); }
+.research-legend .rl.completed   { border-color: var(--ok); color: var(--ok); }
+.research-legend .rl.locked      { opacity: 0.5; }
+.research-legend .rl-note { margin-left: auto; font-style: italic; }
+
+/* ============================================================
    Win overlay
    ============================================================ */
 
