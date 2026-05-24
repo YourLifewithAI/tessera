@@ -1141,30 +1141,29 @@
     old.replaceWith(buildCellDetails());
   }
 
-  // Place the cell-details popover next to the highlighted cell, in the
-  // board-wrap scroll-content coord space so it pans with the cell. Falls
-  // back to placing above the cell when there's no room below; clamps to
-  // stay within the scroll content horizontally.
+  // Place the cell-details popover next to the highlighted cell, pinned to
+  // the viewport (position: fixed). Stays visible as the user pans the map;
+  // moves only when a different cell is selected. Clamps inside the viewport
+  // and avoids the bottom nav.
   function positionCellDetailsToCell(wrap, x, y) {
     if (!wrap.isConnected) return;
     const cell = document.querySelector('.cell[data-x="' + x + '"][data-y="' + y + '"]');
-    const boardWrap = document.getElementById('board-wrap');
-    if (!cell || !boardWrap) return;
+    if (!cell) return;
     const cellRect = cell.getBoundingClientRect();
-    const wrapRect = boardWrap.getBoundingClientRect();
-    const cellLeft = cellRect.left - wrapRect.left + boardWrap.scrollLeft;
-    const cellTop = cellRect.top - wrapRect.top + boardWrap.scrollTop;
-    const cellH = cellRect.height;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const navEl = document.getElementById('mobile-nav');
+    const navTop = (navEl && getComputedStyle(navEl).display !== 'none')
+      ? navEl.getBoundingClientRect().top
+      : vh;
     const popH = wrap.offsetHeight || 70;
     const popW = wrap.offsetWidth || 220;
-    let top = cellTop + cellH + 6;
-    if (top + popH > boardWrap.scrollHeight - 4) {
-      top = Math.max(4, cellTop - popH - 6);
+    let top = cellRect.bottom + 6;
+    if (top + popH > navTop - 4) {
+      top = Math.max(4, cellRect.top - popH - 6);
     }
-    let left = cellLeft;
-    if (left + popW > boardWrap.scrollWidth - 4) {
-      left = boardWrap.scrollWidth - popW - 4;
-    }
+    let left = cellRect.left;
+    if (left + popW > vw - 4) left = vw - popW - 4;
     if (left < 4) left = 4;
     wrap.style.left = left + 'px';
     wrap.style.top = top + 'px';
