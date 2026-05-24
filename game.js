@@ -88,6 +88,7 @@
     // ----- v0.7 mobile UX -----
     highlightedCellXY: null,     // { x, y } | null — cell tapped on mobile
     mobileSheet: '',             // '' | 'build' | 'place' | 'menu' (research uses its own overlay)
+    boardScroll: { x: 0, y: 0 }, // .board-wrap scrollLeft/scrollTop — persisted across rebuilds
     reactionCards: [],           // [{ id, msg, tone }] — floating cards on mobile board
   };
 
@@ -302,6 +303,8 @@
     state.pendingTesserae = {};
     state.lastTesseraCells = {};
     state.selectedTileId = '';
+    state.highlightedCellXY = null;
+    state.boardScroll = { x: 0, y: 0 };
     // Sponsor seeds budget and starting goodwill.
     state.sponsorId = sponsorId || '';
     state.sponsor = (sponsorId && window.SPONSORS) ? (window.SPONSORS[sponsorId] || null) : null;
@@ -812,9 +815,6 @@
 
   // ----- Game board -----
   function renderGameBoard() {
-    const oldWrap = document.getElementById('board-wrap');
-    const savedSL = oldWrap ? oldWrap.scrollLeft : 0;
-    const savedST = oldWrap ? oldWrap.scrollTop : 0;
     clearApp();
     const screen = el('div', 'screen-game-board' + (state.placeData ? ' with-place' : ''));
     screen.id = 'screen-game-board';
@@ -829,13 +829,20 @@
     app.appendChild(screen);
     // Apply persisted zoom (or platform default).
     applyCellPx(getCurrentCellPx());
-    if (savedSL || savedST) {
-      const newWrap = document.getElementById('board-wrap');
-      if (newWrap) {
-        newWrap.scrollLeft = savedSL;
-        newWrap.scrollTop = savedST;
-      }
-    }
+    restoreBoardScroll();
+  }
+
+  // Restore the user's pan position from state. Runs after any DOM op that
+  // could touch .board-wrap (full rebuild, cell-details swap, etc.). Uses
+  // rAF so layout has settled before we set scrollLeft/scrollTop.
+  function restoreBoardScroll() {
+    if (!state.boardScroll.x && !state.boardScroll.y) return;
+    const wrap = document.getElementById('board-wrap');
+    if (!wrap) return;
+    requestAnimationFrame(() => {
+      wrap.scrollLeft = state.boardScroll.x;
+      wrap.scrollTop = state.boardScroll.y;
+    });
   }
 
   function buildHud() {
@@ -1003,6 +1010,14 @@
     // Mobile-only overlays — hidden via CSS on desktop.
     wrap.appendChild(buildReactionOverlay());
     wrap.appendChild(buildCellDetails());
+    // Persist scroll position across any DOM rebuild. The listener keeps
+    // state.boardScroll in sync with the user's pan; renderGameBoard and
+    // selection updates restore from state so iOS Safari quirks can't
+    // jump the view back to the load position.
+    wrap.addEventListener('scroll', () => {
+      state.boardScroll.x = wrap.scrollLeft;
+      state.boardScroll.y = wrap.scrollTop;
+    }, { passive: true });
     // Tap-away on the board-wrap clears cell selection.
     wrap.addEventListener('click', (e) => {
       if (!isMobile()) return;
@@ -1065,6 +1080,7 @@
     updateCellHighlight();
     renderCellDetails();
     renderMobileNav();
+    restoreBoardScroll();
   }
 
   function clearCellSelection() {
@@ -1073,6 +1089,7 @@
     updateCellHighlight();
     renderCellDetails();
     renderMobileNav();
+    restoreBoardScroll();
   }
 
   // Compact details strip pinned to bottom of the board on mobile when a cell
