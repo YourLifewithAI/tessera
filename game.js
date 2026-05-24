@@ -23,8 +23,8 @@
   const REACTION_FADE_MS = 5000;
   const STABILIZATION_TICKS = 5; // per DESIGN.md: Goodwill ≥ 0 sustained for N ticks after formation
 
-  // ----- Economic constants (v0.1 foundation) -----
-  // Cycles ≈ quarterly community-investable capital (per DESIGN.md).
+  // ----- Economic constants (v0.3 dollars) -----
+  // All money is stored in millions of dollars; format at display time.
   // Emissions are kt CO2e/quarter; cumulative compared against a per-year rate.
   const STATE_DEFAULT_EMISSIONS_CAP = 120; // kt CO2e/year if state has no override
   const TFP_PER_AMPLIFIER = 0.05;          // each adjacent Coordination/Civic boosts revenue 5%
@@ -33,12 +33,12 @@
 
   // ----- State -----
   const state = {
-    screen: 'STATE_SELECT', // 'STATE_SELECT' | 'PLACE_SELECT' | 'GAME_BOARD' | 'WIN'
+    screen: 'STATE_SELECT', // 'STATE_SELECT' | 'PLACE_SELECT' | 'SPONSOR_SELECT' | 'GAME_BOARD' | 'WIN'
     selectedStateCode: '',
     terrain: [],                // 2D array [y][x] of terrain string
     placed: {},                 // "x,y" -> tile id
     existingCivic: {},          // "x,y" -> true (existing civic features, unplaceable)
-    cycles: 250,
+    dollars: 80000,                  // budget in $M (set per sponsor on startGame)
     goodwill: 50,
     power: 0,
     compute: 0,
@@ -66,6 +66,9 @@
     placeId: '',                 // selected place id, or '' for state-only flow
     placeData: null,             // { present, appliedUpdates } from TesseraData.derivePresent
     activeCityId: null,          // city where the Tessera is "being built" (county seat by default)
+    // ----- v0.3 sponsor -----
+    sponsorId: '',               // knockoff hyperscaler id (see data/sponsors.js)
+    sponsor: null,               // resolved sponsor record (or null if state-only flow)
   };
 
   // ----- DOM root -----
@@ -100,7 +103,7 @@
   // Game start / reset
   // ===============================================================
 
-  function startGame(stateCode, placeId) {
+  function startGame(stateCode, placeId, sponsorId) {
     state.selectedStateCode = stateCode;
     state.screen = 'GAME_BOARD';
     state.placed = {};
@@ -109,8 +112,11 @@
     state.pendingTesserae = {};
     state.lastTesseraCells = {};
     state.selectedTileId = '';
-    state.cycles = 250;
-    state.goodwill = 50;
+    // Sponsor seeds budget and starting goodwill.
+    state.sponsorId = sponsorId || '';
+    state.sponsor = (sponsorId && window.SPONSORS) ? (window.SPONSORS[sponsorId] || null) : null;
+    state.dollars = state.sponsor ? state.sponsor.startingBudgetM : 25000;  // $25B fallback
+    state.goodwill = 50 + (state.sponsor ? (state.sponsor.startingGoodwill || 0) : 0);
     state.power = 0; state.compute = 0; state.water = 0; state.food = 0;
     state.population = 0;
     state.tesseraeComplete = 0;
@@ -207,8 +213,8 @@
     const tileId = state.selectedTileId;
     const def = window.TILES[tileId];
     const capex = def.capex ?? def.cost ?? 0;
-    if (state.cycles < capex) {
-      setReaction(`Not enough Cycles (need ${capex}).`, 'bad');
+    if (state.dollars < capex) {
+      setReaction(`Not enough budget — ${def.name} costs ${formatDollars(capex)}.`, 'bad');
       renderGameBoard();
       return;
     }
@@ -233,7 +239,7 @@
     }
     // Place
     state.placed[k] = tileId;
-    state.cycles -= capex;
+    state.dollars -= capex;
     // Goodwill modulated by state sentiment.
     // Pro-sentiment states should AMPLIFY positive base goodwill (civic in WA is even better)
     // AND DAMPEN negative base goodwill (SMR in TX hurts less).
@@ -296,7 +302,7 @@
       waterDraw += def.waterDrawPerTick || 0;
       if (state.placed[k] === 'housing') housingCount++;
       // Revenue with TFP: count amplifiers within Tessera radius of this tile.
-      const tileRevenue = def.revenue ?? def.cyclesPerTick ?? 0;
+      const tileRevenue = def.revenue || 0;
       if (tileRevenue !== 0) {
         const [tx, ty] = k.split(',').map(Number);
         let count = 0;
@@ -313,7 +319,7 @@
     state.compute = dc;
     state.water = dw;
     state.food = df;
-    state.cycles += Math.round(boostedRevenue - opex);
+    state.dollars += Math.round(boostedRevenue - opex);
     state.population = housingCount * 250;
     state.jobsOps = jobsOps;
     state.cumulativeEmissions += emissions;
@@ -454,14 +460,15 @@
       btn.addEventListener('mouseenter', () => { state.hoverStateCode = code; updateStateDetail(); });
       btn.addEventListener('focus', () => { state.hoverStateCode = code; updateStateDetail(); });
       btn.addEventListener('click', () => {
+        state.selectedStateCode = code;
+        state.placeId = '';
         const places = (window.TesseraData && window.TesseraData.listPlacesForState)
           ? window.TesseraData.listPlacesForState(code) : [];
         if (places.length > 0) {
-          state.selectedStateCode = code;
           state.screen = 'PLACE_SELECT';
           renderPlaceSelect(places);
         } else {
-          startGame(code, null);
+          goToSponsorSelect();
         }
       });
       grid.appendChild(btn);
@@ -496,13 +503,13 @@
       const pop = baseline && baseline.county ? baseline.county.population : null;
       const meta = `${cityCount} cities · pop ${pop ? pop.toLocaleString() : '—'} · baseline ${baseline ? baseline.baselineDate : '?'}`;
       btn.appendChild(el('span', 'place-meta', meta));
-      btn.addEventListener('click', () => startGame(state.selectedStateCode, p.id));
+      btn.addEventListener('click', () => { state.placeId = p.id; goToSponsorSelect(); });
       grid.appendChild(btn);
     }
     screen.appendChild(grid);
 
     const skip = el('button', 'place-skip', `Play ${sName} without a specific place (state-level sentiment only)`);
-    skip.addEventListener('click', () => startGame(state.selectedStateCode, null));
+    skip.addEventListener('click', () => { state.placeId = ''; goToSponsorSelect(); });
     screen.appendChild(skip);
 
     const back = el('button', 'place-back', '← Back to state picker');
@@ -510,6 +517,69 @@
     screen.appendChild(back);
 
     screen.appendChild(el('div', 'state-footer', 'Place data is loaded via the TesseraData adapter. Forkers: drop a JS file in data/places/ or wire up a custom adapter. See HACKING.md.'));
+
+    app.appendChild(screen);
+  }
+
+  // ----- Sponsor select (hyperscaler picker) -----
+  function goToSponsorSelect() {
+    state.screen = 'SPONSOR_SELECT';
+    renderSponsorSelect();
+  }
+
+  function renderSponsorSelect() {
+    clearApp();
+    const screen = el('div', 'screen-sponsor-select');
+    screen.appendChild(el('h1', 'title', 'YOUR SPONSOR'));
+    screen.appendChild(el('p', 'subtitle', 'A hyperscaler is bankrolling this Tessera. Their budget is your budget. Their reputation is your goodwill floor.'));
+
+    const grid = el('div', 'sponsor-grid');
+    const sponsors = window.SPONSORS ? Object.values(window.SPONSORS) : [];
+    // Sort by budget descending so the flush options lead.
+    sponsors.sort((a, b) => b.startingBudgetM - a.startingBudgetM);
+    for (const s of sponsors) {
+      const btn = el('button', 'sponsor-btn');
+      const head = el('div', 'sponsor-head');
+      head.appendChild(el('span', 'sponsor-name', s.name));
+      head.appendChild(el('span', 'sponsor-shortname', `(${s.shortName})`));
+      btn.appendChild(head);
+      const stats = el('div', 'sponsor-stats');
+      stats.appendChild(el('span', 'sponsor-budget', formatDollars(s.startingBudgetM)));
+      const gw = s.startingGoodwill || 0;
+      const gwSpan = el('span', 'sponsor-gw' + (gw < 0 ? ' bad' : gw > 0 ? ' ok' : ' dim'),
+        `goodwill ${gw >= 0 ? '+' : ''}${gw}`);
+      stats.appendChild(gwSpan);
+      const focus = (s.focus || []).map(t => {
+        const def = window.TILES[t];
+        return def ? def.name : t;
+      }).join(' · ');
+      if (focus) stats.appendChild(el('span', 'sponsor-focus', focus));
+      btn.appendChild(stats);
+      btn.appendChild(el('p', 'sponsor-flavor', s.flavor || ''));
+      btn.appendChild(el('div', 'sponsor-knockoff', `knockoff of ${s.knockoffOf}`));
+      btn.addEventListener('click', () => {
+        startGame(state.selectedStateCode, state.placeId || null, s.id);
+      });
+      grid.appendChild(btn);
+    }
+    screen.appendChild(grid);
+
+    const back = el('button', 'place-back', '← Back');
+    back.addEventListener('click', () => {
+      // Bounce back to the previous screen.
+      const places = (window.TesseraData && window.TesseraData.listPlacesForState)
+        ? window.TesseraData.listPlacesForState(state.selectedStateCode) : [];
+      if (places.length > 0) {
+        state.screen = 'PLACE_SELECT';
+        renderPlaceSelect(places);
+      } else {
+        state.screen = 'STATE_SELECT';
+        renderStateSelect();
+      }
+    });
+    screen.appendChild(back);
+
+    screen.appendChild(el('div', 'state-footer', 'Budgets are calibrated to publicly reported 2025 annual capex. See data/sponsors.js to edit or add knockoffs.'));
 
     app.appendChild(screen);
   }
@@ -547,8 +617,12 @@
     hud.id = 'hud';
     const s = window.STATES[state.selectedStateCode];
     const block = el('div', 'state-name-block');
-    block.appendChild(el('span', 'state-name-line', `${state.selectedStateCode} — ${s.name}`));
-    block.appendChild(el('span', 'paper-line', s.flavor_paper));
+    const placeBit = (state.placeData && state.placeData.present)
+      ? ` · ${state.placeData.present.displayName}`
+      : '';
+    const sponsorBit = state.sponsor ? `${state.sponsor.shortName} @ ` : '';
+    block.appendChild(el('span', 'state-name-line', `${sponsorBit}${state.selectedStateCode} — ${s.name}${placeBit}`));
+    block.appendChild(el('span', 'paper-line', state.sponsor ? state.sponsor.paper : s.flavor_paper));
     hud.appendChild(block);
     // Resource tones: green if you're in surplus, red if in deficit, neutral otherwise.
     const housingCount = Object.values(state.placed).filter(id => id === 'housing').length;
@@ -566,7 +640,7 @@
     const emRate = state.cumulativeEmissions / yearsElapsed;
     const emTone = state.cumulativeEmissions < 0 ? 'ok'
                  : (emRate > emCap ? 'bad' : null);
-    hud.appendChild(stat('Cycles',   state.cycles,           'accent', 'Quarterly community-investable capital. Capex draws it down; revenue and rents replenish.'));
+    hud.appendChild(stat('Budget',   formatDollars(state.dollars), 'accent', 'Sponsor capital remaining. Capex draws it down; tile revenue (less opex) replenishes it each quarter.'));
     hud.appendChild(stat('Goodwill', signed(state.goodwill), state.goodwill >= 0 ? 'ok' : 'bad', 'Community trust. Drops below 0 and Tessera candidates dissipate. Reaches −50 and a moratorium looms.'));
     hud.appendChild(stat('Power',    signed(state.power),    powerTone, 'Net MW across all tiles. Negative + housing = brownouts (−2 goodwill/tick).'));
     hud.appendChild(stat('Compute',  state.compute,          null,      'AI compute output. Not yet spent — sets up v1+ economy.'));
@@ -689,7 +763,7 @@
       }
       const projected = Math.round(def.baseGoodwill * modifier);
       const capex = def.capex ?? def.cost ?? 0;
-      const affordable = state.cycles >= capex;
+      const affordable = state.dollars >= capex;
       const jobsOps = def.jobsOps || 0;
       const emPerTick = def.emissionsPerTick || 0;
       const row = el('button', 'tray-tile' + (state.selectedTileId === id ? ' selected' : '') + (affordable ? '' : ' unaffordable'));
@@ -702,7 +776,7 @@
       const body = el('div', 'tile-body');
       body.appendChild(el('div', 'tile-name', def.name));
       const meta = el('div', 'tile-meta');
-      meta.innerHTML = `${capex}C · base <span class="${def.baseGoodwill >= 0 ? 'gw-pos' : 'gw-neg'}">${signed(def.baseGoodwill)}</span>` +
+      meta.innerHTML = `${formatDollars(capex)} · base <span class="${def.baseGoodwill >= 0 ? 'gw-pos' : 'gw-neg'}">${signed(def.baseGoodwill)}</span>` +
                        ` · here <span class="${projected >= 0 ? 'gw-pos' : 'gw-neg'}">${signed(projected)}</span> · ${def.layer}` +
                        ` · J${jobsOps} · E${signed(emPerTick)}`;
       body.appendChild(meta);
@@ -881,7 +955,7 @@
     overlay.appendChild(el('p', 'win-sub', `${sName}. Six layers in place. Coordination online.`));
     overlay.appendChild(el('p', 'win-flav', 'The mosaic begins. The Arcology is one Tessera closer.'));
     const elapsed = Math.floor((Date.now() - state.gameStartMs) / 1000);
-    overlay.appendChild(el('p', 'win-stats', `Goodwill: ${signed(state.goodwill)}    Cycles remaining: ${state.cycles}    Time: ${elapsed}s`));
+    overlay.appendChild(el('p', 'win-stats', `Goodwill: ${signed(state.goodwill)}    Budget remaining: ${formatDollars(state.dollars)}    Time: ${elapsed}s`));
     const cta = el('div', 'win-cta');
     cta.innerHTML = 'Press <span class="key">Enter</span> or click anywhere to pick a new state.';
     overlay.appendChild(cta);
@@ -901,6 +975,26 @@
   }
 
   function signed(v) { return (v >= 0 ? '+' : '') + v; }
+
+  // Format a dollar amount stored in MILLIONS. Returns "$X.XB" / "$XXXM" / "$XXM".
+  // Negative amounts get a leading minus inside the dollar sign: "-$1.2B".
+  function formatDollars(millions) {
+    if (millions == null || isNaN(millions)) return '$—';
+    const neg = millions < 0 ? '-' : '';
+    const abs = Math.abs(millions);
+    if (abs >= 1000) {
+      // Always 1 decimal at the B scale so $250M deductions remain visible
+      // against a $110B budget ($110.0B → $109.8B).
+      return `${neg}$${(abs / 1000).toFixed(1)}B`;
+    }
+    return `${neg}$${Math.round(abs)}M`;
+  }
+  // Signed dollar delta: "+$5M", "-$120M", "+$1.2B".
+  function signedDollars(millions) {
+    if (millions === 0) return '$0';
+    const sign = millions > 0 ? '+' : '-';
+    return sign + formatDollars(Math.abs(millions)).replace(/^-?\$/, '$');
+  }
 
   // ===============================================================
   // Global input

@@ -33,13 +33,15 @@ A Tessera completes when a contiguous cluster contains **at least one tile from 
 ## v0 Game Loop
 
 1. **Title → State Select.** Pick any of the 50 US states. Sentiment profile loads.
-2. **Community Board.** A 20×16 grid generated to feel like a community in that state. Terrain types (Urban / Suburban / Rural / Industrial / Riverfront / Highway / Park / Existing Civic) determine what can go where.
-3. **Tile Tray.** Nine tile types on the side. Click to select. Each shows cost (Cycles), goodwill delta (varies by state), and resource effects.
-4. **Place Tile.** Click an eligible cell. Tile renders. Cycles deduct. A reaction fires:
-   - Goodwill shifts by `base_delta * state_sentiment_modifier * adjacency_penalty`.
+2. **Place Select** *(if places exist for the state)*. Pick a county; per-city sentiment, expressed needs and concerns, and a "how we got here" history load.
+3. **Sponsor Select.** Pick a knockoff hyperscaler. Their annual capex becomes your starting budget; their public reputation seeds your goodwill.
+4. **Community Board.** A 20×16 grid generated to feel like a community in that state. Terrain types (Urban / Suburban / Rural / Industrial / Riverfront / Highway / Park / Existing Civic) determine what can go where.
+5. **Tile Tray.** Nine tile types on the side. Click to select. Each shows capex in dollars, goodwill delta (varies by state), and resource effects.
+6. **Place Tile.** Click an eligible cell. Tile renders. Budget deducts. A reaction fires:
+   - Goodwill shifts by `base_delta * state_sentiment_modifier * adjacency_penalty`, plus a per-city needs/concerns layer when a place is loaded.
    - A flavor message appears ("**Burleson Tribune**: 'New reactor proposal draws standing-room crowd.'").
-5. **Tick.** Every 2 seconds: resources update from placed tiles. Imbalance (no power, no water, no food) drains goodwill and stalls population growth.
-6. **Tessera Forms.** Cluster check fires after every placement. When the 6-layer + Coordination condition is met, **Tessera Complete** banner fires. v0 win.
+7. **Tick.** Every 2 seconds (= one calendar quarter): tile revenue (in dollars) hits the budget, opex drains it. Imbalance (no power, no water, no food) drains goodwill and stalls population growth.
+8. **Tessera Forms.** Cluster check fires after every placement. When the 6-layer + Coordination condition is met, **Tessera Complete** banner fires. v0 win.
 
 ---
 
@@ -66,23 +68,25 @@ These are *gestural* profiles for v0, not policy science. Refine with real surve
 
 ---
 
-## Tile Catalog (v0)
+## Tile Catalog (v0.3 — dollars)
 
-| Tile | Layer | Cost (Cycles) | Base Goodwill | Notes |
+| Tile | Layer | Capex | Base Goodwill | Notes |
 |---|---|---|---|---|
-| SMR | Power | 80 | -15 | Heavily modulated by `nuclear`. Required for full Tessera. |
-| Solar+Battery | Power | 25 | +2 | Low-controversy power. Doesn't fully replace SMR for big loads. |
-| Data Center | Silicon | 60 | -8 | Heavily modulated by `data_center`. |
-| Chip Fab | Silicon | 70 | -3 | Creates manufacturing jobs — softer reaction than data center. |
-| Mass Timber Housing | Life/Materials | 30 | +5 / -5 | Positive in pro-density states, negative in NIMBY states. |
-| Robotics Factory | Robotics | 50 | -4 | Modulated by job-displacement concern. |
-| Vertical Farm | Closed Loops | 35 | +6 | Modulated by `enviro`. Quietly popular. |
-| Civic Center | Life | 40 | +12 | Schools, clinics, parks. Always goodwill-positive. Lead with this. |
-| Coordination Node | Coordination | 100 | -2 | Required to complete a Tessera. Modulated by `fed_trust`. |
+| SMR | Power | $4B | -15 | Heavily modulated by `nuclear`. Required for full Tessera. |
+| Solar+Battery | Power | $150M | +2 | Low-controversy power. Doesn't fully replace SMR for big loads. |
+| Data Center | Silicon | $2.5B | -8 | Heavily modulated by `data_center`. |
+| Chip Fab | Silicon | $3.5B | -3 | Creates manufacturing jobs — softer reaction than data center. |
+| Mass Timber Housing | Life/Materials | $200M | +5 / -5 | Positive in pro-density states, negative in NIMBY states. |
+| Robotics Factory | Robotics | $800M | -4 | Modulated by job-displacement concern. |
+| Vertical Farm | Closed Loops | $80M | +6 | Modulated by `enviro`. Quietly popular. |
+| Civic Center | Life | $250M | +12 | Schools, clinics, parks. Always goodwill-positive. Lead with this. |
+| Coordination Node | Coordination | $400M | -2 | Required to complete a Tessera. Modulated by `fed_trust`. |
 
-**Cycles regen:** see "Economic substrate" below. Cycles are now redefined as *quarterly community-investable capital*; tiles draw capex, accrue opex, and produce revenue.
+Capex anchors to publicly reported costs (NuScale SMR module band, hyperscale datacenter module costs, mature-node fab references, multifamily timber construction per-unit costs). See `data/tiles.js` header for source list.
 
-**Starting resources:** 250 Cycles, 50 Goodwill, 0 of everything else.
+**Budget regen:** see "Economic substrate" below. Each tile draws capex on placement; opex and revenue flow each quarter; the budget grows or shrinks accordingly.
+
+**Starting resources:** sponsor-determined budget ($35B–$110B), 50 ± sponsor goodwill modifier, 0 of everything else.
 
 ---
 
@@ -141,29 +145,38 @@ Each `UpdateRecord` carries `date` (YYYY-MM), `scope` (`"county"` or `"city:<id>
 
 ---
 
-## Economic substrate (v0.1)
+## Economic substrate (v0.3 — dollars)
 
-The foundation pass adds an explicit economic layer beneath the social-license game. The thesis remains: **the hard part is the community.** Economics is a means of making lived experience and regional spillover legible — not the new win condition.
+The economic layer sits beneath the social-license game. The thesis remains: **the hard part is the community.** Economics makes lived experience and regional spillover legible — it is not the new win condition.
 
-### Cycles, redefined
+### Money is dollars
 
-A Cycle is one unit of quarterly community-investable capital. A tick now anchors to one calendar quarter (`TICK_MS = 4000`, `TICKS_PER_YEAR = 4`); the HUD shows `Year N · Q M`. The old "Cycles regen" rule is replaced by the cash flow:
+All monetary values are stored as **millions of US dollars** and formatted at display time (`$X.XB` / `$XXXM`). One tick is one calendar quarter (`TICK_MS = 4000`, `TICKS_PER_YEAR = 4`); the HUD shows `Year N · Q M`. Each quarter:
 
-> `Δcycles = round(Σ tile.revenue × TFP − Σ tile.opex)`
+> `Δbudget = round(Σ tile.revenue × TFP − Σ tile.opex)`
 
-Existing forks keep working: `cyclesPerTick` is read as a fallback for `revenue`, and `cost` is read as a fallback for `capex`.
+Capex anchors to publicly reported real-world project costs: NuScale/X-energy SMR module (~$4B), hyperscale datacenter module (~$2.5B), mature-node fab (~$3.5B), multifamily timber midrise (~$200M), etc. Revenue is tuned for 3–6 year payback before TFP, so cash flow matters but does not trivialize the sponsor budget.
+
+### Sponsor (knockoff hyperscaler) seeds the budget
+
+The player picks a sponsor at game start. Each sponsor brings:
+- A **starting budget** equal to roughly one year of that hyperscaler's real annual capex ($35B–$110B).
+- A **starting goodwill modifier** (e.g. xAGI −10 for move-fast reputation, Moogle +2 for civic halo).
+- A **paper of record** that shows up in headlines (e.g. "MWS All-Hands Memo").
+
+Sponsors are defined in `data/sponsors.js`. Six ship: MWS, Mikrohard Azurr, Moogle Cloud, Beta Platforms, xAGI, Hortacle Cloud. Forks edit budgets, add sponsors, or replace the lineup wholesale.
 
 ### Per-tile fields (all optional, 0 defaults)
 
-| Field | Meaning |
-|---|---|
-| `capex` | one-time placement cost (Cycles) |
-| `opex` | recurring operating drain (Cycles/quarter) |
-| `revenue` | recurring output sold (Cycles/quarter) |
-| `jobsConstruction` | one-time build labor |
-| `jobsOps` | permanent operating jobs |
-| `emissionsPerTick` | net carbon flow, kt CO₂e/quarter (negative = avoided) |
-| `waterDrawPerTick` | net regional water draw, ML/quarter |
+| Field | Meaning | Units |
+|---|---|---|
+| `capex` | one-time placement cost | $M |
+| `opex` | recurring operating drain | $M/quarter |
+| `revenue` | recurring output sold | $M/quarter |
+| `jobsConstruction` | one-time build labor | person-quarters |
+| `jobsOps` | permanent operating jobs | headcount |
+| `emissionsPerTick` | net carbon flow (negative = avoided) | kt CO₂e/quarter |
+| `waterDrawPerTick` | net regional water draw (negative = produced) | ML/quarter |
 
 Numbers in `data/tiles.js` are gestural but defensible — citations to EIA, BLS, NRC, DOE are inline in the file.
 
@@ -192,7 +205,7 @@ The next two passes — lived-experience and regional spillover — read from th
 
 - One Tessera complete (all 6 layers in a 5-tile-radius cluster + Coordination Node)
 - Goodwill ≥ 0 sustained for 5 ticks after completion
-- Show **TESSERA COMPLETE** banner with state, Cycles spent, Goodwill, time-to-complete
+- Show **TESSERA COMPLETE** banner with state, budget remaining, Goodwill, time-to-complete
 
 v1+: Multi-Tessera chains. Arcology emergence. Real OSM maps. Federated-AI governance UI.
 

@@ -13,6 +13,7 @@ The whole project is vanilla HTML, CSS, and JavaScript. No framework. No build s
 | `game.js` | The whole game: state object, render functions per screen, event handlers, tick loop. |
 | `data/tiles.js` | The nine tile definitions and headline templates. Pure data — mod freely. |
 | `data/states.js` | The 50 state sentiment profiles. Pure data — mod freely. |
+| `data/sponsors.js` | Knockoff hyperscaler sponsors — starting budget, goodwill modifier, paper of record. |
 | `data/tessera-data.js` | Place-data adapter scaffold. Defines `window.TesseraData` and the default registry adapter. |
 | `data/places/*.js` | One file per "place" (county + cities). Each registers itself on `window.TesseraPlaces`. |
 | `tiles/*.svg` | One SVG per tile. Replace any file with your own art; the game picks it up automatically. |
@@ -64,26 +65,25 @@ my_new_tile: {
   name: "My New Tile",
   subtitle: "What it does",
   layer: "Closed Loops",          // must be one of the six, or "Coordination"
-  cost: 40, capex: 40,             // capex is the new alias; either works
+  capex: 300,                      // millions of dollars
   baseGoodwill: 3,
   sentimentKey: "enviro",          // which state score modulates this
   color: "#3DA75C",
   art: "tiles/my_new_tile.svg",    // make this file too
   power: -2, water: 5, compute: 0, food: 0,
-  cyclesPerTick: 0,
   description: "Short flavor sentence.",
 },
 ```
 
 Add headlines for it in `window.HEADLINES` (same file). Done — the tray renders it automatically.
 
-### Add the v0.1 economic fields to a tile
+### Add the economic fields to a tile
 
-All optional, defaults to 0. Add as many as make sense for your tile. The fields and their units:
+All optional, defaults to 0. All monetary fields are in **millions of dollars**. Per-tick fields are per-quarter.
 
 ```js
-opex: 2,                  // recurring operating drain   (Cycles/quarter)
-revenue: 6,               // recurring output sold       (Cycles/quarter)
+opex: 10,                 // recurring operating drain   ($M/quarter)
+revenue: 25,              // recurring output sold       ($M/quarter)
 jobsConstruction: 200,    // one-time build labor        (person-quarters)
 jobsOps: 40,              // permanent operating jobs    (headcount)
 emissionsPerTick: -1,     // net carbon (negative = avoided)  (kt CO2e/quarter)
@@ -92,12 +92,33 @@ waterDrawPerTick: 2,      // net regional water draw     (ML/quarter)
 
 Picking numbers: aim for relative magnitudes that match real-world references (EIA for emissions, BLS for jobs, NRC/DOE for energy capex). Cite your source in a comment. The existing tiles do this — copy the pattern.
 
-A few rules of thumb:
-- Net `revenue − opex` should usually fall in `−2 … +8` Cycles/quarter. Larger and the tile dominates; smaller and it's invisible.
+Rules of thumb:
+- `capex` typically `$50M`–`$5B`. Above ~$8B and you've built a tile no one can place; below ~$30M and it's free money.
+- Net `revenue − opex` should fall in roughly `$0M`–`$80M/quarter`. Tuned so payback is 3–6 years before TFP boost.
 - `emissionsPerTick` typically `−8 … +5`. Negative for displacement (clean power), positive for industrial process.
 - `waterDrawPerTick` typically `−3 … +8`. Negative for closed-loop net producers (vertical farm).
 
 If your tile has revenue, it will benefit from the TFP boost when placed near a Coordination Node or Civic Center (+5% per neighbor within Tessera radius, capped at +25%).
+
+### Add or rebalance a sponsor (knockoff hyperscaler)
+
+Open `data/sponsors.js`. Each entry on `window.SPONSORS` is a sponsor card on the sponsor-select screen:
+
+```js
+my_sponsor: {
+  id: "my_sponsor",
+  name: "Full Name",
+  shortName: "Short",                 // shown in the HUD
+  knockoffOf: "Real Company",
+  startingBudgetM: 75000,             // millions of dollars
+  startingGoodwill: 0,                // +/- modifier to the starting 50
+  flavor: "One sentence of personality.",
+  focus: ["datacenter", "civic"],     // tile ids; shown on the card
+  paper: "Sponsor Paper Name",        // appears in tile-placement headlines
+},
+```
+
+The sponsor-select screen sorts sponsors by budget descending and renders the whole registry. No game-code changes needed. Per-tile capex modifiers per sponsor are a planned v0.4 hook — for now, sponsor differences are budget + starting goodwill + flavor.
 
 ### Add a new place (the "local subscription" pattern)
 
