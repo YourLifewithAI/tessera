@@ -145,6 +145,25 @@ Each `UpdateRecord` carries `date` (YYYY-MM), `scope` (`"county"` or `"city:<id>
 
 ---
 
+## Time progression (v0.5)
+
+A tick is one calendar quarter. SimCity-style controls let the player set the wall-clock pace:
+
+| Button | Key | Real-time per quarter |
+|---|---|---|
+| ◼ Pause   | Space | — (frozen)     |
+| ▶ Slow    | `1`   | 8s             |
+| ▶▶ Normal | `2`   | 4s (default)   |
+| ▶▶▶ Fast  | `3`   | 1s             |
+
+The control sits in the HUD next to the Research stat and shows the active speed. Year/quarter in the HUD advances at the chosen pace; revenue, opex, emissions, research progress, and city sentiment scoring all use the same tick.
+
+**Auto-pause.** Opening the Research panel auto-pauses the game and stores the previous speed; closing the panel restores it. The "auto" flag is cleared if the player manually changes speed while the panel is open, so manual control always wins.
+
+**Why pause/3-speeds, not a slider?** Discrete speeds match how the player thinks about the game (pause to plan, run normal to see effects, fast-forward to wait for long research). A slider would obscure which speeds are meaningful. Keyboard shortcuts make all four reachable without leaving the board.
+
+---
+
 ## Research tree (v0.4)
 
 A 15-node tech tree sits behind a button in the HUD. The thesis stays: **the hard part is the community.** Most research nodes are levers on community-friction (softening specific concerns, amplifying specific needs); a few tune economics; four unlock new tile types.

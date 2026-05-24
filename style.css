@@ -436,6 +436,21 @@ button { font-family: inherit; cursor: pointer; }
 .hud .stat.clickable { cursor: pointer; }
 .hud .stat.clickable:hover { background: var(--panel-high); border-radius: 4px; }
 
+/* ----- Speed control (v0.5) ----- */
+.speed-control {
+  display: flex; gap: 2px; margin-left: 8px;
+  background: var(--panel-high); border-radius: 4px; padding: 2px;
+}
+.speed-control.is-paused { box-shadow: 0 0 0 1px var(--bad); }
+.speed-btn {
+  background: transparent; border: none; color: var(--dim);
+  font-family: inherit; font-size: 12px; padding: 4px 8px; min-width: 32px;
+  border-radius: 3px; cursor: pointer; line-height: 1;
+}
+.speed-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.speed-btn.active { color: var(--accent); background: var(--panel); }
+.speed-btn.pause.active { color: var(--bad); }
+
 .research-overlay {
   position: fixed; inset: 0;
   background: rgba(15, 17, 22, 0.82);

@@ -16,8 +16,13 @@
   // ----- Constants -----
   const BOARD_W = 20;
   const BOARD_H = 16;
-  const TICK_MS = 4000;
-  const TICKS_PER_YEAR = 4; // 1 tick = 1 quarter; one game-year ≈ 16s of real time
+  const TICK_MS = 4000;                  // legacy alias = NORMAL speed
+  const TICKS_PER_YEAR = 4;              // 1 tick = 1 quarter
+  // v0.5 time controls — SimCity-style pause + 3 speeds.
+  const SPEED_MS = { PAUSED: 0, SLOW: 8000, NORMAL: 4000, FAST: 1000 };
+  const SPEED_ORDER = ['PAUSED', 'SLOW', 'NORMAL', 'FAST'];
+  const SPEED_LABEL = { PAUSED: '◼', SLOW: '▶', NORMAL: '▶▶', FAST: '▶▶▶' };
+  const SPEED_NAME  = { PAUSED: 'Paused', SLOW: 'Slow (8s/quarter)', NORMAL: 'Normal (4s)', FAST: 'Fast (1s)' };
   const TESSERA_RADIUS_SQ = 25; // radius 5 squared
   const NEEDED_LAYERS = ["Power", "Silicon", "Materials", "Robotics", "Closed Loops", "Life"];
   const REACTION_FADE_MS = 5000;
@@ -55,6 +60,10 @@
     reactionTimerHandle: null,
     tickHandle: null,
     gameStartMs: 0,
+    // v0.5 time controls
+    speed: 'NORMAL',                 // one of SPEED_ORDER
+    speedBeforeAutoPause: '',        // restored when an auto-pause source closes
+    autoPaused: false,
     // ----- v0.1 economic substrate -----
     tickCount: 0,                // ticks since startGame; year/quarter derived
     cumulativeEmissions: 0,      // kt CO2e since groundbreaking
@@ -88,6 +97,44 @@
   function key(x, y) { return x + ',' + y; }
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // ===== v0.5 time controls =====
+  function setSpeed(s) {
+    if (!(s in SPEED_MS)) return;
+    state.speed = s;
+    if (state.tickHandle) { clearInterval(state.tickHandle); state.tickHandle = null; }
+    if (s !== 'PAUSED' && state.screen === 'GAME_BOARD') {
+      state.tickHandle = setInterval(tick, SPEED_MS[s]);
+    }
+    // If the user manually changes speed while auto-paused, clear that bookkeeping.
+    if (s !== 'PAUSED') state.autoPaused = false;
+    if (state.screen === 'GAME_BOARD') renderHud();
+  }
+  function togglePause() {
+    if (state.screen !== 'GAME_BOARD') return;
+    if (state.speed === 'PAUSED') {
+      setSpeed(state.speedBeforeAutoPause || 'NORMAL');
+      state.speedBeforeAutoPause = '';
+    } else {
+      state.speedBeforeAutoPause = state.speed;
+      setSpeed('PAUSED');
+    }
+  }
+  function autoPause() {
+    if (state.screen !== 'GAME_BOARD') return;
+    if (state.speed === 'PAUSED') return;        // already paused; nothing to restore later
+    state.speedBeforeAutoPause = state.speed;
+    state.autoPaused = true;
+    setSpeed('PAUSED');
+    state.autoPaused = true;                     // setSpeed clears this; re-set
+  }
+  function autoResume() {
+    if (!state.autoPaused) return;               // user took manual control; don't override
+    const prev = state.speedBeforeAutoPause || 'NORMAL';
+    state.speedBeforeAutoPause = '';
+    state.autoPaused = false;
+    setSpeed(prev);
+  }
 
   // ===== v0.4 research helpers =====
   // getEffectiveTile(tileId) returns a clone of the tile def with all
@@ -275,8 +322,10 @@
     generateTerrain(stateCode);
     const sName = window.STATES[stateCode].name;
     setReaction(`Welcome to ${sName}. Lead with civic and housing; build trust before you site the reactor.`, 'accent');
-    if (state.tickHandle) clearInterval(state.tickHandle);
-    state.tickHandle = setInterval(tick, TICK_MS);
+    state.speed = 'NORMAL';
+    state.speedBeforeAutoPause = '';
+    state.autoPaused = false;
+    setSpeed('NORMAL');
     renderGameBoard();
   }
 
@@ -804,9 +853,22 @@
     researchStat.classList.add('clickable');
     researchStat.addEventListener('click', openResearchPanel);
     hud.appendChild(researchStat);
+    // Speed control — pause + 3 speeds, SimCity-style.
+    const speedWrap = el('div', 'speed-control');
+    speedWrap.title = 'Time controls. Space toggles pause. 1/2/3 set Slow/Normal/Fast.';
+    for (const s of SPEED_ORDER) {
+      const b = el('button', 'speed-btn' + (state.speed === s ? ' active' : '') + (s === 'PAUSED' ? ' pause' : ''));
+      b.textContent = SPEED_LABEL[s];
+      b.title = SPEED_NAME[s];
+      b.addEventListener('click', (e) => { e.stopPropagation(); setSpeed(s); });
+      speedWrap.appendChild(b);
+    }
+    if (state.speed === 'PAUSED') speedWrap.classList.add('is-paused');
+    hud.appendChild(speedWrap);
     const hints = el('div', 'hints');
-    hints.innerHTML = '<div>R: restart · B: back · Esc/RClick: deselect</div>'
-                    + `<div>Tick every ${TICK_MS / 1000}s (= 1 quarter). Place tiles to grow.</div>`;
+    const tickSeconds = state.speed === 'PAUSED' ? 'paused' : (SPEED_MS[state.speed] / 1000) + 's';
+    hints.innerHTML = '<div>Space: pause · 1/2/3: speeds · R: restart · B: back</div>'
+                    + `<div>1 tick = 1 quarter (currently ${tickSeconds}).</div>`;
     hud.appendChild(hints);
     return hud;
   }
@@ -1101,12 +1163,14 @@
   // ----- Research panel (v0.4) -----
   function openResearchPanel() {
     state.researchPanelOpen = true;
+    autoPause();                                 // freeze the world while the player thinks
     renderResearchPanel();
   }
   function closeResearchPanel() {
     state.researchPanelOpen = false;
     const old = document.getElementById('research-overlay');
     if (old) old.remove();
+    autoResume();
   }
   function renderResearchPanel() {
     const existing = document.getElementById('research-overlay');
@@ -1344,13 +1408,23 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (state.researchPanelOpen) { closeResearchPanel(); return; }
       if (state.selectedTileId) {
         state.selectedTileId = '';
         if (state.screen === 'GAME_BOARD') { renderTray(); renderSelectedDesc(); }
       }
+    } else if (e.key === ' ' && state.screen === 'GAME_BOARD') {
+      e.preventDefault();
+      togglePause();
+    } else if (e.key === '1' && state.screen === 'GAME_BOARD') {
+      setSpeed('SLOW');
+    } else if (e.key === '2' && state.screen === 'GAME_BOARD') {
+      setSpeed('NORMAL');
+    } else if (e.key === '3' && state.screen === 'GAME_BOARD') {
+      setSpeed('FAST');
     } else if (e.key === 'r' || e.key === 'R') {
       if (state.screen !== 'STATE_SELECT' && state.selectedStateCode) {
-        startGame(state.selectedStateCode);
+        startGame(state.selectedStateCode, state.placeId || null, state.sponsorId || null);
       }
     } else if (e.key === 'b' || e.key === 'B') {
       if (state.screen !== 'STATE_SELECT') backToStateSelect();
