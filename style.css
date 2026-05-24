@@ -248,9 +248,9 @@ button { font-family: inherit; cursor: pointer; }
 
 .legend {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px 14px;
+  gap: 10px;
   font-size: 11px;
   color: var(--dim);
 }
@@ -260,7 +260,18 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: 0.5px;
   color: var(--dim);
   margin-right: 4px;
+  flex-shrink: 0;
 }
+.legend-items {
+  display: flex; align-items: center;
+  gap: 14px;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.legend-items::-webkit-scrollbar { display: none; }
+.legend-items > * { flex-shrink: 0; }
 .legend-item { display: flex; align-items: center; gap: 6px; }
 .legend-item.locked .legend-name {
   color: var(--bad);
@@ -335,22 +346,21 @@ button { font-family: inherit; cursor: pointer; }
 
 .board-wrap { position: relative; }  /* anchor for overlays */
 
-.zoom-controls {
-  position: absolute; top: 10px; right: 10px;
+/* Zoom buttons pinned to the right end of the legend strip. */
+.legend-zoom {
   display: flex; gap: 4px;
-  background: var(--panel); border: 1px solid var(--panel-high);
-  border-radius: var(--radius); padding: 3px;
-  z-index: 5; box-shadow: var(--shadow);
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .zoom-btn {
-  background: transparent; border: none; color: var(--text);
-  font-size: 18px; line-height: 1; font-weight: 600;
-  width: 32px; height: 32px;
+  background: var(--panel-high); border: 1px solid transparent; color: var(--text);
+  font-size: 16px; line-height: 1; font-weight: 600;
+  width: 28px; height: 28px;
   border-radius: 4px; cursor: pointer;
 }
-.zoom-btn:hover { background: var(--panel-high); color: var(--accent); }
+.zoom-btn:hover { border-color: var(--panel-high); color: var(--accent); }
 @media (max-width: 720px) {
-  .zoom-btn { width: 40px; height: 40px; font-size: 20px; }
+  .zoom-btn { width: 36px; height: 36px; font-size: 18px; }
 }
 
 .reaction-overlay {
@@ -805,15 +815,10 @@ button { font-family: inherit; cursor: pointer; }
   .cell { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22); }
   /* Legend: single-row horizontal scroll on mobile so it stays compact. */
   .legend {
-    font-size: 10px; gap: 10px;
+    font-size: 10px;
     padding: 2px 2px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
     flex-shrink: 0;
   }
-  .legend::-webkit-scrollbar { display: none; }
-  .legend > * { flex-shrink: 0; }
   .legend-title { font-size: 9px; }
 
   /* --- v0.7 hide desktop-only chrome on mobile (now lives in nav + sheets + overlays) --- */

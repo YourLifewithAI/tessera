@@ -1006,7 +1006,7 @@
     // Legend pinned ABOVE the board on both platforms (mobile + desktop).
     wrap.appendChild(buildLegend());
     wrap.appendChild(board);
-    attachZoomControls(wrap);
+    // (Zoom controls now live inside the legend, see buildLegend.)
     // Mobile-only overlays — hidden via CSS on desktop.
     wrap.appendChild(buildReactionOverlay());
     wrap.appendChild(buildCellDetails());
@@ -1053,6 +1053,7 @@
   function buildLegend() {
     const legend = el('div', 'legend');
     legend.appendChild(el('span', 'legend-title', 'Map key'));
+    const items = el('div', 'legend-items');
     const order = ['rural', 'suburban', 'urban', 'industrial', 'park', 'river', 'highway', 'civic'];
     for (const t of order) {
       const info = TERRAIN_INFO[t];
@@ -1061,8 +1062,21 @@
       const swatch = el('span', 't-' + t + ' legend-swatch' + (t === 'civic' ? ' has-marker' : ''));
       item.appendChild(swatch);
       item.appendChild(el('span', 'legend-name', info.name));
-      legend.appendChild(item);
+      items.appendChild(item);
     }
+    legend.appendChild(items);
+    // Zoom buttons pinned to the right end of the legend strip — never scroll
+    // away with the terrain items, never overlap the board.
+    const zoom = el('div', 'legend-zoom');
+    const minus = el('button', 'zoom-btn', '−');
+    minus.title = 'Zoom out';
+    minus.addEventListener('click', (e) => { e.stopPropagation(); changeZoom(-4); });
+    const plus = el('button', 'zoom-btn', '+');
+    plus.title = 'Zoom in';
+    plus.addEventListener('click', (e) => { e.stopPropagation(); changeZoom(+4); });
+    zoom.appendChild(minus);
+    zoom.appendChild(plus);
+    legend.appendChild(zoom);
     return legend;
   }
 
@@ -1195,19 +1209,6 @@
   // Zoom +/- floating in the top-right of the board area. localStorage-persisted.
   // Both platforms; clamps 22-60px. Inline --cell on :root drives mobile size too,
   // since v0.7 dropped the mobile clamp() rule in favor of a JS-driven default.
-  function attachZoomControls(wrap) {
-    const controls = el('div', 'zoom-controls');
-    controls.id = 'zoom-controls';
-    const minus = el('button', 'zoom-btn', '−');
-    minus.title = 'Zoom out';
-    minus.addEventListener('click', (e) => { e.stopPropagation(); changeZoom(-4); });
-    const plus = el('button', 'zoom-btn', '+');
-    plus.title = 'Zoom in';
-    plus.addEventListener('click', (e) => { e.stopPropagation(); changeZoom(+4); });
-    controls.appendChild(minus);
-    controls.appendChild(plus);
-    wrap.appendChild(controls);
-  }
 
   function getCurrentCellPx() {
     // Either the persisted/explicit value, or a sensible default per platform.
