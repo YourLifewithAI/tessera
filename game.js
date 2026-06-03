@@ -89,6 +89,10 @@
     cumulativeWaterDraw: 0,      // ML since groundbreaking
     jobsOps: 0,                  // current operating headcount across all tiles
     lastJobsBonusYear: -1,       // jobs-rule fires at most once per game-year
+    // v0.8 cash-flow snapshot — recomputed every tick; surfaced in HUD chips.
+    qIncomeRate: 0,              // $M/quarter revenue (with TFP)
+    qOpexRate: 0,                // $M/quarter opex
+    qNetRate: 0,                 // qIncome - qOpex
     policies: {},                // placeholder hook for the next pass (CBAs, PILOTs, zoning)
     // ----- v0.2 place data -----
     placeId: '',                 // selected place id, or '' for state-only flow
@@ -599,16 +603,24 @@
     state.food = df;
     state.population = housingCount * 250;
     state.jobsOps = jobsOps;
+    // Stash quarterly rates so the HUD can show "money in / money out" without
+    // recomputing the aggregate on every render.
+    state.qIncomeRate = boostedRevenue;
+    state.qOpexRate = opex;
+    state.qNetRate = boostedRevenue - opex;
+    // Cash flow: pro-rate revenue/opex daily so the budget visibly moves each
+    // tick. Over a full quarter (91 ticks) the total swing is identical to
+    // applying the full quarterly amount once. Fractional dollars are fine —
+    // formatDollars rounds at display time.
+    state.dollars += state.qNetRate / DAYS_PER_QUARTER;
     // Cumulative environmental impact accumulates daily (1/91 of quarterly rate).
     state.cumulativeEmissions += qEmissions / DAYS_PER_QUARTER;
     state.cumulativeWaterDraw += qWaterDraw / DAYS_PER_QUARTER;
 
-    // ===== Quarterly accumulators =====
-    // Revenue, opex, and goodwill rules fire on the day that crosses into a
-    // new quarter. This preserves v0.7 balance: a quarter of game time still
-    // produces the same dollar swing and the same goodwill pressure.
+    // ===== Quarter-boundary checks =====
+    // Goodwill rules fire on quarter-end days so per-quarter pressure matches
+    // v0.7 balance. Revenue/opex have already been pro-rated daily above.
     if (quarterBoundary) {
-      state.dollars += Math.round(boostedRevenue - opex);
       // Brownouts: housing without enough power for a full quarter.
       if (housingCount > 0 && state.power < 0) {
         state.goodwill = clamp(state.goodwill - 2, -100, 200);
@@ -936,7 +948,8 @@
     const foodTone  = housingCount === 0
       ? null
       : (state.food < housingCount && state.food < 5 ? 'bad' : 'ok');
-    // v0.8 calendar: tick = day. Show formatted date + current quarter.
+    // v0.8 calendar: tick = day. Date pinned to the front so time is the
+    // first thing the player sees.
     const dateStr = formatGameDate(state.tickCount);
     const quarter = getGameQuarter(state.tickCount);
     // Emissions tone: green if net-avoided, red if exceeding rate cap, neutral otherwise.
@@ -945,7 +958,15 @@
     const emRate = state.cumulativeEmissions / yearsElapsed;
     const emTone = state.cumulativeEmissions < 0 ? 'ok'
                  : (emRate > emCap ? 'bad' : null);
-    hud.appendChild(stat('Budget',   formatDollars(state.dollars), 'accent', 'Sponsor capital remaining. Capex draws it down; tile revenue (less opex) settles every quarter.'));
+    // Cash-flow chip: per-quarter net. Tone follows sign.
+    const netTone = state.qNetRate > 0 ? 'ok' : (state.qNetRate < 0 ? 'bad' : null);
+    const incomeYr = Math.round(state.qIncomeRate * 4);
+    const opexYr   = Math.round(state.qOpexRate * 4);
+    const cashflowLabel = signedDollars(Math.round(state.qNetRate)) + '/q';
+    const cashflowTip = `Income: +$${incomeYr}M/yr (+$${Math.round(state.qIncomeRate)}M/qtr).  Opex: -$${opexYr}M/yr (-$${Math.round(state.qOpexRate)}M/qtr).  Pro-rated daily into Budget.`;
+    hud.appendChild(stat('Date',     `${dateStr} · Q${quarter}`, 'accent', `1 tick = 1 day. At 1× speed, one in-game year ≈ 24 min wall-clock. Starting Jan 1, ${START_YEAR}.`));
+    hud.appendChild(stat('Budget',   formatDollars(state.dollars), 'accent', `Sponsor capital remaining. Tile revenue (less opex) accrues to the budget every tick. Current net: ${cashflowLabel}.`));
+    hud.appendChild(stat('Cash flow', cashflowLabel, netTone, cashflowTip));
     hud.appendChild(stat('Goodwill', signed(state.goodwill), state.goodwill >= 0 ? 'ok' : 'bad', 'Community trust. Drops below 0 and Tessera candidates dissipate. Reaches −50 and a moratorium looms.'));
     hud.appendChild(stat('Power',    signed(state.power),    powerTone, 'Net MW across all tiles. Negative + housing = brownouts (−2 goodwill/quarter).'));
     hud.appendChild(stat('Compute',  state.compute,          null,      'AI compute output. Not yet spent — sets up v0.9 economy.'));
@@ -954,7 +975,6 @@
     hud.appendChild(stat('Pop',      state.population,       null,      '~250 residents per Mass Timber Housing tile.'));
     hud.appendChild(stat('Jobs',     state.jobsOps,          null,      `Operating jobs across all tiles. ≥${Math.round(JOBS_GOODWILL_THRESHOLD * 100)}% of pop triggers a yearly goodwill bonus.`));
     hud.appendChild(stat('Emissions', Math.round(state.cumulativeEmissions), emTone, `Cumulative kt CO2e since groundbreaking. State cap: ${emCap} kt/yr; current rate: ${Math.round(emRate)} kt/yr.`));
-    hud.appendChild(stat('Date',     `${dateStr} · Q${quarter}`, 'accent', `1 tick = 1 day. At 1× speed, one in-game year ≈ 24 min wall-clock. Starting Jan 1, ${START_YEAR}.`));
     hud.appendChild(stat('Tesserae', state.tesseraeComplete, 'accent',  'Completed Tesserae this session.'));
     // Research stat — clickable; opens the research panel.
     const inProg = state.research.inProgressId ? window.RESEARCH[state.research.inProgressId] : null;
