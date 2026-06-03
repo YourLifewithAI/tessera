@@ -16,17 +16,36 @@
   // ----- Constants -----
   const BOARD_W = 20;
   const BOARD_H = 16;
-  const TICK_MS = 4000;                  // legacy alias = NORMAL speed
-  const TICKS_PER_YEAR = 4;              // 1 tick = 1 quarter
-  // v0.5 time controls — SimCity-style pause + 3 speeds.
-  const SPEED_MS = { PAUSED: 0, SLOW: 8000, NORMAL: 4000, FAST: 1000 };
-  const SPEED_ORDER = ['PAUSED', 'SLOW', 'NORMAL', 'FAST'];
-  const SPEED_LABEL = { PAUSED: '◼', SLOW: '▶', NORMAL: '▶▶', FAST: '▶▶▶' };
-  const SPEED_NAME  = { PAUSED: 'Paused', SLOW: 'Slow (8s/quarter)', NORMAL: 'Normal (4s)', FAST: 'Fast (1s)' };
+  // v0.8: 1 tick = 1 day. At 1x speed, TICK_MS = 4000ms → 1 in-game year ≈ 24.3 min wall clock.
+  // Per-quarter accumulators (revenue, opex, goodwill rules) fire on quarter-boundary days.
+  const TICK_MS = 4000;                  // legacy alias = 1× speed
+  const DAYS_PER_QUARTER = 91;           // 4 × 91 = 364; day 365 falls in Q4
+  const DAYS_PER_YEAR = DAYS_PER_QUARTER * 4;  // 364 game-days per year (close to 365)
+  const START_YEAR = 2026;
+  const START_MONTH = 0;                 // January (0-indexed)
+  const START_DAY = 1;
+  // v0.8 time controls — pause + four play speeds doubling each step.
+  const SPEED_MS = {
+    PAUSED:   0,
+    SPEED_1X: 4000,   // 24 min / in-game year
+    SPEED_2X: 2000,
+    SPEED_4X: 1000,
+    SPEED_8X:  500,
+  };
+  const SPEED_ORDER = ['PAUSED', 'SPEED_1X', 'SPEED_2X', 'SPEED_4X', 'SPEED_8X'];
+  const SPEED_LABEL = { PAUSED: '◼', SPEED_1X: '▶', SPEED_2X: '▶▶', SPEED_4X: '▶▶▶', SPEED_8X: '▶▶▶▶' };
+  const SPEED_NAME  = {
+    PAUSED:   'Paused',
+    SPEED_1X: '1× (24 min/yr)',
+    SPEED_2X: '2×',
+    SPEED_4X: '4×',
+    SPEED_8X: '8×',
+  };
   const TESSERA_RADIUS_SQ = 25; // radius 5 squared
   const NEEDED_LAYERS = ["Power", "Silicon", "Materials", "Robotics", "Closed Loops", "Life"];
   const REACTION_FADE_MS = 5000;
-  const STABILIZATION_TICKS = 5; // per DESIGN.md: Goodwill ≥ 0 sustained for N ticks after formation
+  // Tessera stabilization: hold Goodwill ≥ 0 for one quarter after the cluster forms.
+  const STABILIZATION_DAYS = DAYS_PER_QUARTER;
 
   // ----- Economic constants (v0.3 dollars) -----
   // All money is stored in millions of dollars; format at display time.
@@ -54,18 +73,18 @@
     hoverStateCode: null,
     tesseraeComplete: 0,
     countedCoordCells: {},       // "x,y" -> true (already-won coord nodes)
-    pendingTesserae: {},         // "x,y" -> { ticksRemaining, cluster } (forming, not yet locked)
+    pendingTesserae: {},         // "x,y" -> { daysRemaining, cluster } (forming, not yet locked)
     lastTesseraCells: {},        // "x,y" -> true (cluster to outline on board)
     reaction: null,              // { msg, tone, id }
     reactionTimerHandle: null,
     tickHandle: null,
     gameStartMs: 0,
-    // v0.5 time controls
-    speed: 'NORMAL',                 // one of SPEED_ORDER
+    // v0.8 time controls — pause + four play speeds
+    speed: 'SPEED_1X',               // one of SPEED_ORDER
     speedBeforeAutoPause: '',        // restored when an auto-pause source closes
     autoPaused: false,
     // ----- v0.1 economic substrate -----
-    tickCount: 0,                // ticks since startGame; year/quarter derived
+    tickCount: 0,                // ticks (days) since startGame; date derived
     cumulativeEmissions: 0,      // kt CO2e since groundbreaking
     cumulativeWaterDraw: 0,      // ML since groundbreaking
     jobsOps: 0,                  // current operating headcount across all tiles
@@ -82,7 +101,8 @@
     research: {
       completed: {},             // { researchId: true }
       inProgressId: '',          // currently funded research, or '' if idle
-      ticksRemaining: 0,         // quarters left on in-progress research
+      ticksRemaining: 0,         // v0.8: days left on in-progress research
+      totalDays: 0,              // v0.8: total days at start (for progress %)
     },
     researchPanelOpen: false,    // modal toggle
     // ----- v0.7 mobile UX -----
@@ -103,7 +123,39 @@
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-  // ===== v0.5 time controls =====
+  // ===== v0.8 calendar helpers =====
+  // 1 tick = 1 day. tickCount=0 is START_YEAR / START_MONTH / START_DAY.
+  // Use UTC throughout so the player's timezone doesn't shift the date.
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function getGameDate(tickCount) {
+    const d = new Date(Date.UTC(START_YEAR, START_MONTH, START_DAY));
+    d.setUTCDate(d.getUTCDate() + (tickCount | 0));
+    return d;
+  }
+  function formatGameDate(tickCount) {
+    const d = getGameDate(tickCount);
+    return MONTH_NAMES[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear();
+  }
+  function getGameYear(tickCount) { return getGameDate(tickCount).getUTCFullYear(); }
+  function getGameQuarter(tickCount) {
+    return Math.floor(getGameDate(tickCount).getUTCMonth() / 3) + 1;
+  }
+  // True on the tick that crosses into a new quarter. (Quarter at tickCount differs
+  // from quarter at tickCount-1.) tick 0 is the first day, so we still fire.
+  function isQuarterBoundary(tickCount) {
+    if (tickCount <= 0) return false;
+    return getGameQuarter(tickCount) !== getGameQuarter(tickCount - 1)
+        || getGameYear(tickCount)    !== getGameYear(tickCount - 1);
+  }
+  function isYearBoundary(tickCount) {
+    if (tickCount <= 0) return false;
+    return getGameYear(tickCount) !== getGameYear(tickCount - 1);
+  }
+  function yearsElapsedFloat(tickCount) {
+    return Math.max(0.25, tickCount / DAYS_PER_YEAR);
+  }
+
+  // ===== v0.8 time controls =====
   function setSpeed(s) {
     if (!(s in SPEED_MS)) return;
     state.speed = s;
@@ -118,7 +170,7 @@
   function togglePause() {
     if (state.screen !== 'GAME_BOARD') return;
     if (state.speed === 'PAUSED') {
-      setSpeed(state.speedBeforeAutoPause || 'NORMAL');
+      setSpeed(state.speedBeforeAutoPause || 'SPEED_1X');
       state.speedBeforeAutoPause = '';
     } else {
       state.speedBeforeAutoPause = state.speed;
@@ -135,7 +187,7 @@
   }
   function autoResume() {
     if (!state.autoPaused) return;               // user took manual control; don't override
-    const prev = state.speedBeforeAutoPause || 'NORMAL';
+    const prev = state.speedBeforeAutoPause || 'SPEED_1X';
     state.speedBeforeAutoPause = '';
     state.autoPaused = false;
     setSpeed(prev);
@@ -246,12 +298,15 @@
     if (state.research.inProgressId) return;
     state.dollars -= (r.costM || 0);
     state.research.inProgressId = rid;
-    state.research.ticksRemaining = r.durationQuarters || 1;
+    // v0.8: ticks are days. Convert durationQuarters → days.
+    state.research.ticksRemaining = (r.durationQuarters || 1) * DAYS_PER_QUARTER;
+    state.research.totalDays = state.research.ticksRemaining;
   }
   function cancelResearch() {
     // No refund — funding sunk into the program.
     state.research.inProgressId = '';
     state.research.ticksRemaining = 0;
+    state.research.totalDays = 0;
   }
 
   function squaredDistance(ax, ay, bx, by) {
@@ -311,7 +366,7 @@
     state.dollars = state.sponsor ? state.sponsor.startingBudgetM : 25000;  // $25B fallback
     state.goodwill = 50 + (state.sponsor ? (state.sponsor.startingGoodwill || 0) : 0);
     // Research: sponsor's starting nodes are pre-completed.
-    state.research = { completed: {}, inProgressId: '', ticksRemaining: 0 };
+    state.research = { completed: {}, inProgressId: '', ticksRemaining: 0, totalDays: 0 };
     if (state.sponsor && Array.isArray(state.sponsor.startingResearch)) {
       for (const rid of state.sponsor.startingResearch) {
         if (window.RESEARCH && window.RESEARCH[rid]) state.research.completed[rid] = true;
@@ -348,10 +403,10 @@
     generateTerrain(stateCode);
     const sName = window.STATES[stateCode].name;
     setReaction(`Welcome to ${sName}. Lead with civic and housing; build trust before you site the reactor.`, 'accent');
-    state.speed = 'NORMAL';
+    state.speed = 'SPEED_1X';
     state.speedBeforeAutoPause = '';
     state.autoPaused = false;
-    setSpeed('NORMAL');
+    setSpeed('SPEED_1X');
     renderGameBoard();
   }
 
@@ -480,7 +535,11 @@
   function tick() {
     if (state.screen !== 'GAME_BOARD') return;
     state.tickCount++;
-    // Research progress.
+    // v0.8 boundary flags — set ONCE per day so we don't recompute repeatedly.
+    const quarterBoundary = isQuarterBoundary(state.tickCount);
+    const yearBoundary    = isYearBoundary(state.tickCount);
+
+    // Research progress (daily).
     if (state.research.inProgressId && state.research.ticksRemaining > 0) {
       state.research.ticksRemaining -= 1;
       if (state.research.ticksRemaining <= 0) {
@@ -489,13 +548,17 @@
         state.research.completed[rid] = true;
         state.research.inProgressId = '';
         state.research.ticksRemaining = 0;
+        state.research.totalDays = 0;
         if (r) setReaction(`Research complete: ${r.name}.`, 'ok');
       }
     }
+    // Aggregate over all placed tiles. Per-tile values in data are PER-QUARTER
+    // canonical units (revenue, opex, emissionsPerTick, waterDrawPerTick); we
+    // accumulate emissions/water daily as 1/91 of that, and apply revenue/opex
+    // as full quarterly amounts at quarter boundaries.
     let dp = 0, dc = 0, dw = 0, df = 0, housingCount = 0;
     let opex = 0, baseRevenue = 0, boostedRevenue = 0;
-    let jobsOps = 0, emissions = 0, waterDraw = 0;
-    // Index amplifier tiles (Coordination + Civic) for the TFP boost.
+    let jobsOps = 0, qEmissions = 0, qWaterDraw = 0;
     const amplifiers = [];
     for (const k of Object.keys(state.placed)) {
       const id = state.placed[k];
@@ -513,10 +576,9 @@
       df += def.food || 0;
       opex += def.opex || 0;
       jobsOps += def.jobsOps || 0;
-      emissions += def.emissionsPerTick || 0;
-      waterDraw += def.waterDrawPerTick || 0;
+      qEmissions += def.emissionsPerTick || 0;
+      qWaterDraw += def.waterDrawPerTick || 0;
       if (state.placed[k] === 'housing') housingCount++;
-      // Revenue with TFP: count amplifiers within Tessera radius of this tile.
       const tileRevenue = def.revenue || 0;
       if (tileRevenue !== 0) {
         const [tx, ty] = k.split(',').map(Number);
@@ -530,52 +592,60 @@
         boostedRevenue += tileRevenue * tfp;
       }
     }
+    // Current balances (refresh every day so the HUD reflects the moment).
     state.power = dp;
     state.compute = dc;
     state.water = dw;
     state.food = df;
-    state.dollars += Math.round(boostedRevenue - opex);
     state.population = housingCount * 250;
     state.jobsOps = jobsOps;
-    state.cumulativeEmissions += emissions;
-    state.cumulativeWaterDraw += waterDraw;
-    // Penalties when housing is starving
-    if (housingCount > 0) {
-      if (state.power < 0) {
+    // Cumulative environmental impact accumulates daily (1/91 of quarterly rate).
+    state.cumulativeEmissions += qEmissions / DAYS_PER_QUARTER;
+    state.cumulativeWaterDraw += qWaterDraw / DAYS_PER_QUARTER;
+
+    // ===== Quarterly accumulators =====
+    // Revenue, opex, and goodwill rules fire on the day that crosses into a
+    // new quarter. This preserves v0.7 balance: a quarter of game time still
+    // produces the same dollar swing and the same goodwill pressure.
+    if (quarterBoundary) {
+      state.dollars += Math.round(boostedRevenue - opex);
+      // Brownouts: housing without enough power for a full quarter.
+      if (housingCount > 0 && state.power < 0) {
         state.goodwill = clamp(state.goodwill - 2, -100, 200);
         setReaction("Brownouts. Goodwill -2.", 'bad');
       }
-      if (state.food < housingCount && state.food < 5) {
+      // Food shortage: insufficient food for population.
+      if (housingCount > 0 && state.food < housingCount && state.food < 5) {
         state.goodwill = clamp(state.goodwill - 1, -100, 200);
         setReaction("Food shortages. Add a vertical farm. Goodwill -1.", 'bad');
       }
+      // Emissions rate vs state cap.
+      const yearsElapsed = yearsElapsedFloat(state.tickCount);
+      const sObj = window.STATES[state.selectedStateCode] || {};
+      const emCap = sObj.emissionsCap ?? STATE_DEFAULT_EMISSIONS_CAP;
+      if (state.cumulativeEmissions / yearsElapsed > emCap) {
+        state.goodwill = clamp(state.goodwill - 1, -100, 200);
+        setReaction("Emissions outpacing the state cap. Neighbors are organizing. Goodwill -1.", 'bad');
+      }
+      if (state.goodwill <= -50) {
+        setReaction("Goodwill collapsed. Moratorium likely. Press B for a different state, R to restart.", 'bad');
+      }
     }
-    // Emissions rate rule: penalize if cumulative/year exceeds the state cap.
-    // Use yearsElapsed = tickCount / TICKS_PER_YEAR, floored to at least 0.25
-    // so a single bad quarter doesn't immediately trip the rule.
-    const yearsElapsed = Math.max(0.25, state.tickCount / TICKS_PER_YEAR);
-    const sObj = window.STATES[state.selectedStateCode] || {};
-    const emCap = sObj.emissionsCap ?? STATE_DEFAULT_EMISSIONS_CAP;
-    if (state.cumulativeEmissions / yearsElapsed > emCap) {
-      state.goodwill = clamp(state.goodwill - 1, -100, 200);
-      setReaction("Emissions outpacing the state cap. Neighbors are organizing. Goodwill -1.", 'bad');
+    // Jobs rule fires at most once per game-year, evaluated on year boundaries.
+    if (yearBoundary) {
+      const currentYear = getGameYear(state.tickCount);
+      if (state.population > 0
+          && state.jobsOps >= state.population * JOBS_GOODWILL_THRESHOLD
+          && state.goodwill < 100
+          && currentYear > state.lastJobsBonusYear) {
+        state.goodwill = clamp(state.goodwill + 1, -100, 200);
+        state.lastJobsBonusYear = currentYear;
+        setReaction("Strong local employment — community supports the project. Goodwill +1.", 'ok');
+      }
     }
-    // Jobs rule: strong local employment lifts goodwill, at most once per year.
-    const currentYear = Math.floor(state.tickCount / TICKS_PER_YEAR);
-    if (state.population > 0
-        && state.jobsOps >= state.population * JOBS_GOODWILL_THRESHOLD
-        && state.goodwill < 100
-        && currentYear > state.lastJobsBonusYear) {
-      state.goodwill = clamp(state.goodwill + 1, -100, 200);
-      state.lastJobsBonusYear = currentYear;
-      setReaction("Strong local employment — community supports the project. Goodwill +1.", 'ok');
-    }
-    if (state.goodwill <= -50) {
-      setReaction("Goodwill collapsed. Moratorium likely. Press B for a different state, R to restart.", 'bad');
-    }
-    // Pending tessera stabilization (DESIGN.md win condition).
-    // Any pending must hold Goodwill ≥ 0 for STABILIZATION_TICKS ticks. If it
-    // drops below zero, the candidate dissipates and must reform.
+
+    // Pending Tessera stabilization. Hold Goodwill ≥ 0 for STABILIZATION_DAYS.
+    // A drop below 0 on any single day dissipates the candidate.
     let pendingFailed = false;
     for (const pk of Object.keys(state.pendingTesserae)) {
       if (state.goodwill < 0) {
@@ -585,8 +655,8 @@
         setReaction("Stabilization failed — Goodwill dropped below zero. The Tessera dissipates.", 'bad');
         continue;
       }
-      state.pendingTesserae[pk].ticksRemaining--;
-      if (state.pendingTesserae[pk].ticksRemaining <= 0) {
+      state.pendingTesserae[pk].daysRemaining--;
+      if (state.pendingTesserae[pk].daysRemaining <= 0) {
         state.countedCoordCells[pk] = true;
         state.tesseraeComplete++;
         state.lastTesseraCells = state.pendingTesserae[pk].cluster;
@@ -595,9 +665,10 @@
         if (state.tickHandle) { clearInterval(state.tickHandle); state.tickHandle = null; }
         renderWin();
         return;
-      } else {
-        const n = state.pendingTesserae[pk].ticksRemaining;
-        setReaction(`Stabilizing… ${n} more tick${n === 1 ? '' : 's'} to lock the Tessera in.`, 'ok');
+      } else if (quarterBoundary) {
+        const n = state.pendingTesserae[pk].daysRemaining;
+        const months = Math.max(1, Math.round(n / 30));
+        setReaction(`Stabilizing… ~${months} month${months === 1 ? '' : 's'} to lock the Tessera in.`, 'ok');
       }
     }
     checkTesserae();
@@ -634,9 +705,10 @@
       }
       const allFound = NEEDED_LAYERS.every(l => foundLayers[l]);
       if (allFound && state.goodwill >= 0) {
-        state.pendingTesserae[k] = { ticksRemaining: STABILIZATION_TICKS, cluster };
+        state.pendingTesserae[k] = { daysRemaining: STABILIZATION_DAYS, cluster };
         state.lastTesseraCells = cluster;
-        setReaction(`Tessera forming — hold Goodwill ≥ 0 for ${STABILIZATION_TICKS} ticks to lock it in.`, 'accent');
+        const months = Math.round(STABILIZATION_DAYS / 30);
+        setReaction(`Tessera forming — hold Goodwill ≥ 0 for ~${months} months to lock it in.`, 'accent');
         return;
       }
     }
@@ -864,55 +936,60 @@
     const foodTone  = housingCount === 0
       ? null
       : (state.food < housingCount && state.food < 5 ? 'bad' : 'ok');
-    // Time anchor: 1 tick = 1 quarter. Year 1 · Q1 at tick 0.
-    const year = Math.floor(state.tickCount / TICKS_PER_YEAR) + 1;
-    const quarter = (state.tickCount % TICKS_PER_YEAR) + 1;
+    // v0.8 calendar: tick = day. Show formatted date + current quarter.
+    const dateStr = formatGameDate(state.tickCount);
+    const quarter = getGameQuarter(state.tickCount);
     // Emissions tone: green if net-avoided, red if exceeding rate cap, neutral otherwise.
-    const yearsElapsed = Math.max(0.25, state.tickCount / TICKS_PER_YEAR);
+    const yearsElapsed = yearsElapsedFloat(state.tickCount);
     const emCap = s.emissionsCap ?? STATE_DEFAULT_EMISSIONS_CAP;
     const emRate = state.cumulativeEmissions / yearsElapsed;
     const emTone = state.cumulativeEmissions < 0 ? 'ok'
                  : (emRate > emCap ? 'bad' : null);
-    hud.appendChild(stat('Budget',   formatDollars(state.dollars), 'accent', 'Sponsor capital remaining. Capex draws it down; tile revenue (less opex) replenishes it each quarter.'));
+    hud.appendChild(stat('Budget',   formatDollars(state.dollars), 'accent', 'Sponsor capital remaining. Capex draws it down; tile revenue (less opex) settles every quarter.'));
     hud.appendChild(stat('Goodwill', signed(state.goodwill), state.goodwill >= 0 ? 'ok' : 'bad', 'Community trust. Drops below 0 and Tessera candidates dissipate. Reaches −50 and a moratorium looms.'));
-    hud.appendChild(stat('Power',    signed(state.power),    powerTone, 'Net MW across all tiles. Negative + housing = brownouts (−2 goodwill/tick).'));
-    hud.appendChild(stat('Compute',  state.compute,          null,      'AI compute output. Not yet spent — sets up v1+ economy.'));
+    hud.appendChild(stat('Power',    signed(state.power),    powerTone, 'Net MW across all tiles. Negative + housing = brownouts (−2 goodwill/quarter).'));
+    hud.appendChild(stat('Compute',  state.compute,          null,      'AI compute output. Not yet spent — sets up v0.9 economy.'));
     hud.appendChild(stat('Water',    signed(state.water),    waterTone, 'Net water balance. Farms produce, housing/civic consume.'));
-    hud.appendChild(stat('Food',     state.food,             foodTone,  'Food output. Must meet population or housing starves (−1 goodwill/tick).'));
+    hud.appendChild(stat('Food',     state.food,             foodTone,  'Food output. Must meet population or housing starves (−1 goodwill/quarter).'));
     hud.appendChild(stat('Pop',      state.population,       null,      '~250 residents per Mass Timber Housing tile.'));
     hud.appendChild(stat('Jobs',     state.jobsOps,          null,      `Operating jobs across all tiles. ≥${Math.round(JOBS_GOODWILL_THRESHOLD * 100)}% of pop triggers a yearly goodwill bonus.`));
-    hud.appendChild(stat('Emissions', state.cumulativeEmissions, emTone, `Cumulative kt CO2e since groundbreaking. State cap: ${emCap} kt/yr; current rate: ${Math.round(emRate)} kt/yr.`));
-    hud.appendChild(stat('Year',     `${year} · Q${quarter}`, 'accent', `1 tick = 1 quarter. ${TICKS_PER_YEAR} ticks/year.`));
+    hud.appendChild(stat('Emissions', Math.round(state.cumulativeEmissions), emTone, `Cumulative kt CO2e since groundbreaking. State cap: ${emCap} kt/yr; current rate: ${Math.round(emRate)} kt/yr.`));
+    hud.appendChild(stat('Date',     `${dateStr} · Q${quarter}`, 'accent', `1 tick = 1 day. At 1× speed, one in-game year ≈ 24 min wall-clock. Starting Jan 1, ${START_YEAR}.`));
     hud.appendChild(stat('Tesserae', state.tesseraeComplete, 'accent',  'Completed Tesserae this session.'));
     // Research stat — clickable; opens the research panel.
     const inProg = state.research.inProgressId ? window.RESEARCH[state.research.inProgressId] : null;
+    const researchPct = inProg && state.research.totalDays > 0
+      ? Math.max(0, Math.min(99, Math.round((1 - state.research.ticksRemaining / state.research.totalDays) * 100)))
+      : 0;
     const researchLabel = inProg
-      ? `${inProg.name.length > 24 ? inProg.name.slice(0, 22) + '…' : inProg.name} · ${state.research.ticksRemaining}q`
+      ? `${inProg.name.length > 22 ? inProg.name.slice(0, 20) + '…' : inProg.name} · ${researchPct}%`
       : `${Object.keys(state.research.completed).length} done · open ▸`;
     const researchTone = inProg ? 'accent' : null;
+    const inProgDays = state.research.ticksRemaining;
+    const inProgMonths = Math.max(1, Math.round(inProgDays / 30));
     const researchTip = inProg
-      ? `Researching: ${inProg.name}. ${state.research.ticksRemaining} quarter(s) remaining. Click to open the research panel.`
+      ? `Researching: ${inProg.name}. ~${inProgMonths} month(s) remaining (${inProgDays} days). Click to open the research panel.`
       : 'Click to open the research panel and pick a tech node.';
     const researchStat = stat('Research', researchLabel, researchTone, researchTip);
     researchStat.classList.add('clickable');
     researchStat.addEventListener('click', openResearchPanel);
     hud.appendChild(researchStat);
-    // Speed control — pause + 3 speeds, SimCity-style.
+    // Speed control — pause + four play speeds, doubling.
     const speedWrap = el('div', 'speed-control');
-    speedWrap.title = 'Time controls. Space toggles pause. 1/2/3 set Slow/Normal/Fast.';
-    for (const s of SPEED_ORDER) {
-      const b = el('button', 'speed-btn' + (state.speed === s ? ' active' : '') + (s === 'PAUSED' ? ' pause' : ''));
-      b.textContent = SPEED_LABEL[s];
-      b.title = SPEED_NAME[s];
-      b.addEventListener('click', (e) => { e.stopPropagation(); setSpeed(s); });
+    speedWrap.title = 'Time controls. Space toggles pause. 1/2/3/4 set 1×/2×/4×/8×.';
+    for (const sp of SPEED_ORDER) {
+      const b = el('button', 'speed-btn' + (state.speed === sp ? ' active' : '') + (sp === 'PAUSED' ? ' pause' : ''));
+      b.textContent = SPEED_LABEL[sp];
+      b.title = SPEED_NAME[sp];
+      b.addEventListener('click', (e) => { e.stopPropagation(); setSpeed(sp); });
       speedWrap.appendChild(b);
     }
     if (state.speed === 'PAUSED') speedWrap.classList.add('is-paused');
     hud.appendChild(speedWrap);
     const hints = el('div', 'hints');
     const tickSeconds = state.speed === 'PAUSED' ? 'paused' : (SPEED_MS[state.speed] / 1000) + 's';
-    hints.innerHTML = '<div>Space: pause · 1/2/3: speeds · R: restart · B: back</div>'
-                    + `<div>1 tick = 1 quarter (currently ${tickSeconds}).</div>`;
+    hints.innerHTML = '<div>Space: pause · 1/2/3/4: 1×/2×/4×/8× · R: restart · B: back</div>'
+                    + `<div>1 tick = 1 day (currently ${tickSeconds}).</div>`;
     hud.appendChild(hints);
     return hud;
   }
@@ -1618,10 +1695,11 @@
     const inProg = state.research.inProgressId ? RES[state.research.inProgressId] : null;
     if (inProg) {
       const banner = el('div', 'research-inprogress');
-      const total = inProg.durationQuarters || 1;
-      const done = total - state.research.ticksRemaining;
-      const pct = Math.max(0, Math.min(100, Math.round((done / total) * 100)));
-      banner.innerHTML = `<div class="rip-title">In progress: <b>${inProg.name}</b> · ${state.research.ticksRemaining} of ${total} quarters left</div>` +
+      const totalDays = state.research.totalDays || ((inProg.durationQuarters || 1) * DAYS_PER_QUARTER);
+      const daysLeft = state.research.ticksRemaining;
+      const monthsLeft = Math.max(1, Math.round(daysLeft / 30));
+      const pct = Math.max(0, Math.min(100, Math.round((1 - daysLeft / totalDays) * 100)));
+      banner.innerHTML = `<div class="rip-title">In progress: <b>${inProg.name}</b> · ${pct}% (~${monthsLeft} month${monthsLeft === 1 ? '' : 's'} left)</div>` +
         `<div class="rip-bar"><div class="rip-fill" style="width:${pct}%"></div></div>`;
       const cancel = el('button', 'rip-cancel', 'Cancel (no refund)');
       cancel.addEventListener('click', () => { cancelResearch(); renderResearchPanel(); renderHud(); });
@@ -1707,7 +1785,7 @@
       card.appendChild(head);
       card.appendChild(el('div', 'rn-name', r.name));
       const meta = el('div', 'rn-meta');
-      meta.textContent = `${formatDollars(r.costM)} · ${r.durationQuarters}q`;
+      meta.textContent = `${formatDollars(r.costM)} · ${r.durationQuarters} quarter${r.durationQuarters === 1 ? '' : 's'}`;
       if (r.prereqs && r.prereqs.length) {
         const names = r.prereqs.map(p => RES[p] ? RES[p].name : p);
         meta.textContent += ` · req: ${names.join(', ')}`;
@@ -1781,7 +1859,8 @@
     overlay.appendChild(el('p', 'win-sub', `${sName}. Six layers in place. Coordination online.`));
     overlay.appendChild(el('p', 'win-flav', 'The mosaic begins. The Arcology is one Tessera closer.'));
     const elapsed = Math.floor((Date.now() - state.gameStartMs) / 1000);
-    overlay.appendChild(el('p', 'win-stats', `Goodwill: ${signed(state.goodwill)}    Budget remaining: ${formatDollars(state.dollars)}    Time: ${elapsed}s`));
+    const finishedOn = formatGameDate(state.tickCount);
+    overlay.appendChild(el('p', 'win-stats', `Stabilized ${finishedOn}    ·    Goodwill: ${signed(state.goodwill)}    Budget remaining: ${formatDollars(state.dollars)}    Wall clock: ${elapsed}s`));
     const cta = el('div', 'win-cta');
     cta.innerHTML = 'Press <span class="key">Enter</span> or click anywhere to pick a new state.';
     overlay.appendChild(cta);
@@ -1839,11 +1918,13 @@
       e.preventDefault();
       togglePause();
     } else if (e.key === '1' && state.screen === 'GAME_BOARD') {
-      setSpeed('SLOW');
+      setSpeed('SPEED_1X');
     } else if (e.key === '2' && state.screen === 'GAME_BOARD') {
-      setSpeed('NORMAL');
+      setSpeed('SPEED_2X');
     } else if (e.key === '3' && state.screen === 'GAME_BOARD') {
-      setSpeed('FAST');
+      setSpeed('SPEED_4X');
+    } else if (e.key === '4' && state.screen === 'GAME_BOARD') {
+      setSpeed('SPEED_8X');
     } else if (e.key === 'r' || e.key === 'R') {
       if (state.screen !== 'STATE_SELECT' && state.selectedStateCode) {
         startGame(state.selectedStateCode, state.placeId || null, state.sponsorId || null);
