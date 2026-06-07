@@ -7,37 +7,44 @@
 //   enviro       — environmental priority (helps closed-loop tiles)
 //   fed_trust    — trust in federal-program-style infrastructure
 //
+// Optional v0.1 economic field:
+//   emissionsCap — kt CO2e/year above which the Tessera draws a Goodwill
+//                  penalty. Lower = stricter. Missing = STATE_DEFAULT_EMISSIONS_CAP
+//                  (defined in game.js; default 120 kt/yr). Only outlier states
+//                  are overridden here.
+//
 // These are GESTURAL profiles. Sources include:
 //   - Data Center Watch (moratorium activity, 2025–2026)
 //   - Quinnipiac AI trust poll (March 2026)
 //   - NRC SMR licensing posture + state energy plans
 //   - State zoning / YIMBY indicators
+//   - State climate plans / RPS targets (for emissionsCap calibration)
 //
 // PRs welcome with better data. Forkers: refine these freely.
 // ===============================================================
 
 window.STATES = {
-  AL: {name:"Alabama",        nuclear: 1, data_center: 1, density:-1, enviro: 0, fed_trust:-1, flavor_paper:"Birmingham News",          terrain_bias:["rural","suburban","rural","industrial","rural"]},
+  AL: {name:"Alabama",        nuclear: 1, data_center: 1, density:-1, enviro: 0, fed_trust:-1, flavor_paper:"Birmingham News",          terrain_bias:["rural","suburban","rural","industrial","rural"], emissionsCap:200},
   AK: {name:"Alaska",         nuclear: 0, data_center: 0, density:-2, enviro: 1, fed_trust:-1, flavor_paper:"Anchorage Daily News",     terrain_bias:["rural","rural","rural","park","park"]},
   AZ: {name:"Arizona",        nuclear: 1, data_center: 1, density:-1, enviro: 0, fed_trust: 0, flavor_paper:"Arizona Republic",         terrain_bias:["suburban","rural","industrial","suburban","rural"]},
   AR: {name:"Arkansas",       nuclear: 1, data_center: 0, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Arkansas Democrat-Gazette",terrain_bias:["rural","rural","suburban","rural","industrial"]},
-  CA: {name:"California",     nuclear:-2, data_center: 0, density: 2, enviro: 2, fed_trust: 0, flavor_paper:"Sacramento Bee",           terrain_bias:["urban","suburban","urban","park","suburban"]},
+  CA: {name:"California",     nuclear:-2, data_center: 0, density: 2, enviro: 2, fed_trust: 0, flavor_paper:"Sacramento Bee",           terrain_bias:["urban","suburban","urban","park","suburban"], emissionsCap:60},
   CO: {name:"Colorado",       nuclear: 0, data_center: 0, density: 1, enviro: 1, fed_trust: 0, flavor_paper:"Denver Post",              terrain_bias:["suburban","rural","urban","park","suburban"]},
   CT: {name:"Connecticut",    nuclear:-1, data_center: 0, density: 1, enviro: 1, fed_trust: 0, flavor_paper:"Hartford Courant",         terrain_bias:["suburban","urban","suburban","park","rural"]},
   DE: {name:"Delaware",       nuclear: 0, data_center: 0, density: 0, enviro: 0, fed_trust: 0, flavor_paper:"News Journal",             terrain_bias:["suburban","industrial","rural","suburban","suburban"]},
   FL: {name:"Florida",        nuclear: 1, data_center: 1, density: 0, enviro:-1, fed_trust: 0, flavor_paper:"Tampa Bay Times",          terrain_bias:["suburban","urban","suburban","rural","park"]},
   GA: {name:"Georgia",        nuclear: 2, data_center: 1, density: 0, enviro: 0, fed_trust:-1, flavor_paper:"Atlanta Journal-Constitution", terrain_bias:["suburban","rural","industrial","suburban","rural"]},
-  HI: {name:"Hawaii",         nuclear:-2, data_center: 0, density: 0, enviro: 2, fed_trust: 0, flavor_paper:"Honolulu Star-Advertiser", terrain_bias:["suburban","park","urban","park","rural"]},
+  HI: {name:"Hawaii",         nuclear:-2, data_center: 0, density: 0, enviro: 2, fed_trust: 0, flavor_paper:"Honolulu Star-Advertiser", terrain_bias:["suburban","park","urban","park","rural"], emissionsCap:50},
   ID: {name:"Idaho",          nuclear: 2, data_center: 1, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Idaho Statesman",          terrain_bias:["rural","suburban","rural","industrial","park"]},
   IL: {name:"Illinois",       nuclear: 1, data_center: 1, density: 1, enviro: 1, fed_trust: 0, flavor_paper:"Chicago Tribune",          terrain_bias:["urban","suburban","rural","industrial","suburban"]},
   IN: {name:"Indiana",        nuclear: 1, data_center: 0, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Indianapolis Star",        terrain_bias:["suburban","rural","industrial","rural","suburban"]},
   IA: {name:"Iowa",           nuclear: 0, data_center: 0, density:-1, enviro: 0, fed_trust:-1, flavor_paper:"Des Moines Register",      terrain_bias:["rural","rural","suburban","industrial","rural"]},
   KS: {name:"Kansas",         nuclear: 0, data_center: 0, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Kansas City Star",         terrain_bias:["rural","suburban","rural","industrial","rural"]},
   KY: {name:"Kentucky",       nuclear: 0, data_center: 0, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Courier-Journal",          terrain_bias:["rural","suburban","rural","industrial","park"]},
-  LA: {name:"Louisiana",      nuclear: 1, data_center: 1, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Times-Picayune",           terrain_bias:["suburban","river","industrial","rural","suburban"]},
-  ME: {name:"Maine",          nuclear:-1, data_center:-1, density:-1, enviro: 2, fed_trust: 0, flavor_paper:"Portland Press Herald",    terrain_bias:["rural","park","rural","suburban","rural"]},
+  LA: {name:"Louisiana",      nuclear: 1, data_center: 1, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Times-Picayune",           terrain_bias:["suburban","river","industrial","rural","suburban"], emissionsCap:240},
+  ME: {name:"Maine",          nuclear:-1, data_center:-1, density:-1, enviro: 2, fed_trust: 0, flavor_paper:"Portland Press Herald",    terrain_bias:["rural","park","rural","suburban","rural"], emissionsCap:60},
   MD: {name:"Maryland",       nuclear: 0, data_center:-1, density: 1, enviro: 1, fed_trust: 1, flavor_paper:"Baltimore Sun",            terrain_bias:["suburban","urban","suburban","industrial","park"]},
-  MA: {name:"Massachusetts",  nuclear:-1, data_center: 0, density: 2, enviro: 2, fed_trust: 1, flavor_paper:"Boston Globe",             terrain_bias:["urban","suburban","urban","park","suburban"]},
+  MA: {name:"Massachusetts",  nuclear:-1, data_center: 0, density: 2, enviro: 2, fed_trust: 1, flavor_paper:"Boston Globe",             terrain_bias:["urban","suburban","urban","park","suburban"], emissionsCap:60},
   MI: {name:"Michigan",       nuclear: 1, data_center: 0, density: 0, enviro: 1, fed_trust: 0, flavor_paper:"Detroit Free Press",       terrain_bias:["suburban","industrial","rural","urban","park"]},
   MN: {name:"Minnesota",      nuclear: 0, data_center: 1, density: 1, enviro: 1, fed_trust: 0, flavor_paper:"Star Tribune",             terrain_bias:["suburban","urban","rural","park","suburban"]},
   MS: {name:"Mississippi",    nuclear: 0, data_center: 0, density:-2, enviro:-1, fed_trust:-2, flavor_paper:"Clarion-Ledger",           terrain_bias:["rural","rural","suburban","rural","industrial"]},
@@ -48,23 +55,23 @@ window.STATES = {
   NH: {name:"New Hampshire",  nuclear: 0, data_center: 0, density:-1, enviro: 1, fed_trust: 0, flavor_paper:"Concord Monitor",          terrain_bias:["rural","suburban","park","rural","suburban"]},
   NJ: {name:"New Jersey",     nuclear: 0, data_center:-1, density: 1, enviro: 1, fed_trust: 0, flavor_paper:"Star-Ledger",              terrain_bias:["suburban","urban","industrial","suburban","park"]},
   NM: {name:"New Mexico",     nuclear: 1, data_center: 0, density:-1, enviro: 0, fed_trust: 0, flavor_paper:"Albuquerque Journal",      terrain_bias:["rural","suburban","rural","industrial","park"]},
-  NY: {name:"New York",       nuclear:-1, data_center:-1, density: 2, enviro: 1, fed_trust: 0, flavor_paper:"Hudson Valley Times",      terrain_bias:["urban","suburban","rural","park","urban"]},
+  NY: {name:"New York",       nuclear:-1, data_center:-1, density: 2, enviro: 1, fed_trust: 0, flavor_paper:"Hudson Valley Times",      terrain_bias:["urban","suburban","rural","park","urban"], emissionsCap:70},
   NC: {name:"North Carolina", nuclear: 1, data_center: 0, density: 0, enviro: 1, fed_trust: 0, flavor_paper:"Charlotte Observer",       terrain_bias:["suburban","rural","industrial","suburban","park"]},
-  ND: {name:"North Dakota",   nuclear: 1, data_center: 0, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"Bismarck Tribune",         terrain_bias:["rural","rural","industrial","rural","suburban"]},
+  ND: {name:"North Dakota",   nuclear: 1, data_center: 0, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"Bismarck Tribune",         terrain_bias:["rural","rural","industrial","rural","suburban"], emissionsCap:240},
   OH: {name:"Ohio",           nuclear: 1, data_center: 0, density: 0, enviro: 0, fed_trust: 0, flavor_paper:"Columbus Dispatch",        terrain_bias:["suburban","industrial","rural","urban","suburban"]},
-  OK: {name:"Oklahoma",       nuclear: 0, data_center: 0, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"The Oklahoman",            terrain_bias:["rural","suburban","rural","industrial","rural"]},
-  OR: {name:"Oregon",         nuclear:-1, data_center: 0, density: 1, enviro: 2, fed_trust: 0, flavor_paper:"The Oregonian",            terrain_bias:["urban","suburban","park","rural","suburban"]},
+  OK: {name:"Oklahoma",       nuclear: 0, data_center: 0, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"The Oklahoman",            terrain_bias:["rural","suburban","rural","industrial","rural"], emissionsCap:220},
+  OR: {name:"Oregon",         nuclear:-1, data_center: 0, density: 1, enviro: 2, fed_trust: 0, flavor_paper:"The Oregonian",            terrain_bias:["urban","suburban","park","rural","suburban"], emissionsCap:60},
   PA: {name:"Pennsylvania",   nuclear: 1, data_center:-2, density: 0, enviro: 0, fed_trust:-1, flavor_paper:"Harrisburg Patriot-News",  terrain_bias:["suburban","industrial","rural","suburban","urban"]},
   RI: {name:"Rhode Island",   nuclear:-1, data_center: 0, density: 1, enviro: 1, fed_trust: 0, flavor_paper:"Providence Journal",       terrain_bias:["urban","suburban","river","urban","suburban"]},
   SC: {name:"South Carolina", nuclear: 1, data_center: 1, density:-1, enviro: 0, fed_trust:-1, flavor_paper:"Post and Courier",         terrain_bias:["suburban","rural","industrial","suburban","park"]},
-  SD: {name:"South Dakota",   nuclear: 1, data_center: 0, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"Argus Leader",             terrain_bias:["rural","rural","industrial","rural","suburban"]},
+  SD: {name:"South Dakota",   nuclear: 1, data_center: 0, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"Argus Leader",             terrain_bias:["rural","rural","industrial","rural","suburban"], emissionsCap:240},
   TN: {name:"Tennessee",      nuclear: 2, data_center: 1, density:-1, enviro:-1, fed_trust: 0, flavor_paper:"Tennessean",               terrain_bias:["suburban","rural","industrial","rural","park"]},
-  TX: {name:"Texas",          nuclear: 2, data_center: 1, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Burleson County Tribune",  terrain_bias:["rural","suburban","rural","industrial","suburban"]},
+  TX: {name:"Texas",          nuclear: 2, data_center: 1, density:-1, enviro:-1, fed_trust:-1, flavor_paper:"Burleson County Tribune",  terrain_bias:["rural","suburban","rural","industrial","suburban"], emissionsCap:240},
   UT: {name:"Utah",           nuclear: 1, data_center: 1, density: 0, enviro: 0, fed_trust:-1, flavor_paper:"Salt Lake Tribune",        terrain_bias:["suburban","rural","industrial","park","rural"]},
-  VT: {name:"Vermont",        nuclear:-2, data_center:-2, density:-1, enviro: 2, fed_trust: 0, flavor_paper:"Burlington Free Press",    terrain_bias:["rural","park","suburban","rural","park"]},
+  VT: {name:"Vermont",        nuclear:-2, data_center:-2, density:-1, enviro: 2, fed_trust: 0, flavor_paper:"Burlington Free Press",    terrain_bias:["rural","park","suburban","rural","park"], emissionsCap:40},
   VA: {name:"Virginia",       nuclear: 1, data_center:-2, density: 0, enviro: 0, fed_trust: 0, flavor_paper:"Loudoun Times-Mirror",     terrain_bias:["suburban","rural","industrial","suburban","park"]},
-  WA: {name:"Washington",     nuclear: 0, data_center: 1, density: 1, enviro: 2, fed_trust: 1, flavor_paper:"Seattle Times",            terrain_bias:["urban","suburban","park","rural","industrial"]},
-  WV: {name:"West Virginia",  nuclear: 1, data_center: 0, density:-2, enviro:-1, fed_trust:-2, flavor_paper:"Charleston Gazette-Mail",  terrain_bias:["rural","rural","industrial","park","suburban"]},
+  WA: {name:"Washington",     nuclear: 0, data_center: 1, density: 1, enviro: 2, fed_trust: 1, flavor_paper:"Seattle Times",            terrain_bias:["urban","suburban","park","rural","industrial"], emissionsCap:70},
+  WV: {name:"West Virginia",  nuclear: 1, data_center: 0, density:-2, enviro:-1, fed_trust:-2, flavor_paper:"Charleston Gazette-Mail",  terrain_bias:["rural","rural","industrial","park","suburban"], emissionsCap:220},
   WI: {name:"Wisconsin",      nuclear: 0, data_center: 0, density: 0, enviro: 1, fed_trust: 0, flavor_paper:"Milwaukee Journal Sentinel", terrain_bias:["suburban","rural","industrial","park","rural"]},
-  WY: {name:"Wyoming",        nuclear: 2, data_center: 1, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"Kemmerer Gazette",         terrain_bias:["rural","rural","industrial","park","rural"]},
+  WY: {name:"Wyoming",        nuclear: 2, data_center: 1, density:-2, enviro:-1, fed_trust:-1, flavor_paper:"Kemmerer Gazette",         terrain_bias:["rural","rural","industrial","park","rural"], emissionsCap:260},
 };
